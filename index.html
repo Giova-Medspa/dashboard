@@ -192,6 +192,15 @@ const STORAGE_KEY = 'giova-dashboard';
 const DL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
 const SHARE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
 
+/* Secure provider dashboard URLs — each provider sees ONLY their own data */
+const SECURE_URLS = {
+  'dr-silkey': 'https://giova-medspa.github.io/dashboard/p/dr-silkey-b6cb5bdfcb45.html',
+  'summer-faulkner': 'https://giova-medspa.github.io/dashboard/p/summer-84df2957d762.html',
+  'riley-packer': 'https://giova-medspa.github.io/dashboard/p/riley-647567ab0581.html',
+  'brooklyn-jensen': 'https://giova-medspa.github.io/dashboard/p/brooklyn-3fd09d68a9cd.html',
+  'sadie-zeidler': 'https://giova-medspa.github.io/dashboard/p/sadie-aec194b8dbd5.html',
+};
+
 let STATE = { months: {}, currentMonth: null, period: 'month', provider: null };
 
 /* Seed data — February 2026 */
@@ -582,7 +591,8 @@ function renderProvider(provSlug) {
     </div>
     <div class="download-bar">
       <button class="dl-btn" onclick="downloadProvider('${slug(p.name)}')">${DL_ICON} Download Scorecard</button>
-      <button class="dl-btn" onclick="shareProvider('${slug(p.name)}')">${SHARE_ICON} Copy Share Link</button>
+      <button class="dl-btn" onclick="shareProvider('${slug(p.name)}')">${SHARE_ICON} Copy Secure Link</button>
+      ${SECURE_URLS[slug(p.name)] ? `<span style="font-family:'Roboto Condensed',sans-serif;font-size:10px;letter-spacing:1px;color:var(--g-pigeon);align-self:center">Copies their private dashboard link — they can only see their own data</span>` : ''}
     </div>
     <div class="scorecards">${renderScorecard(p,showWeekly)}</div>
     <div class="dash-footer"><p>Gi&oacute;va Aesthetics + Wellness &bull; 192 S Main St, Kaysville, UT 84037 &bull; (385) 554-1606</p><p style="margin-top:4px;opacity:0.5">Confidential &mdash; Internal Use Only</p></div>`;
@@ -647,7 +657,7 @@ function downloadCard(el,name) { html2canvas(el,{scale:2,backgroundColor:'#f4efe
 function downloadProvider(s) { const el=document.getElementById('card-'+s); if(el) downloadCard(el,'GIOVA-'+s+'.png'); }
 function downloadSelected() { const s=document.getElementById('provSelect'); if(s&&s.value) downloadProvider(s.value); }
 function downloadAll() { document.querySelectorAll('.scorecard').forEach((el,i)=>setTimeout(()=>downloadCard(el,'GIOVA-'+el.id.replace('card-','')+'.png'),i*500)); }
-function shareProvider(s) { const u=location.origin+location.pathname+'#'+s; navigator.clipboard.writeText(u).then(()=>alert('Link copied!\\n'+u)); }
+function shareProvider(s) { const u=SECURE_URLS[s]||location.origin+location.pathname+'#'+s; navigator.clipboard.writeText(u).then(()=>alert('Secure link copied!\n'+u)); }
 
 /* ============================================
    INIT
