@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brooklyn Jensen — GIOVA Dashboard</title>
+<meta name="robots" content="noindex, nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Roboto+Condensed:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --g-dark: #2e2e2e; --g-brown: #5a4f42; --g-pigeon: #6b7378; --g-sky: #d1dddb;
+  --g-beige: #cba98a; --g-med-beige: #ead9c1; --g-vanilla: #f4efea; --g-cream: #fffded;
+  --g-teal: #008989; --g-green: #4a9e6e; --g-red: #c4564a; --g-amber: #d4a24e;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Lato', sans-serif; background: var(--g-vanilla); color: var(--g-dark); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.dashboard { max-width: 900px; margin: 0 auto; padding: 40px 24px 80px; }
+.dash-header { display: flex; align-items: center; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--g-med-beige); }
+.logo-wrap { display: flex; align-items: center; justify-content: center; background: #3e3e3e; border-radius: 8px; padding: 14px 24px; flex-shrink: 0; }
+.logo-wrap .logo-img { height: 48px; width: auto; display: block; }
+.header-center { flex: 1; text-align: center; }
+.dash-header h1 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 32px; color: var(--g-dark); letter-spacing: 2px; margin-bottom: 4px; }
+.dash-header .meta { font-family: 'Roboto Condensed', sans-serif; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--g-pigeon); }
+.welcome { text-align: center; margin-bottom: 32px; }
+.welcome h2 { font-family: 'Cormorant Garamond', serif; font-weight: 300; font-size: 26px; color: var(--g-brown); margin-bottom: 4px; }
+.welcome p { font-size: 13px; color: var(--g-pigeon); }
+.scorecard { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid rgba(114,100,83,0.08); }
+.sc-header { padding: 28px 32px 20px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid rgba(114,100,83,0.06); }
+.sc-header .name { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 29px; color: var(--g-dark); }
+.sc-header .goal-badge .goal-label { font-family: 'Roboto Condensed', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: var(--g-pigeon); }
+.sc-header .goal-badge .goal-value { font-family: 'Cormorant Garamond', serif; font-weight: 300; font-size: 25px; color: var(--g-brown); }
+.sc-header .goal-badge { text-align: right; }
+.sc-progress { padding: 16px 32px; background: var(--g-cream); }
+.sc-progress .track { height: 10px; background: var(--g-sky); border-radius: 5px; overflow: hidden; }
+.sc-progress .fill { height: 100%; border-radius: 5px; }
+.sc-progress .progress-info { display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; }
+.sc-progress .pct { font-family: 'Roboto Condensed', sans-serif; font-weight: 700; font-size: 15px; }
+.sc-progress .remaining { color: var(--g-pigeon); }
+.sc-body { padding: 24px 32px 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.sc-section-label { font-family: 'Roboto Condensed', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--g-brown); margin-bottom: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--g-med-beige); }
+.pacing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.pace-block { background: var(--g-cream); border-radius: 6px; padding: 14px 16px; }
+.pace-block .pace-label { font-family: 'Roboto Condensed', sans-serif; font-size: 9px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--g-pigeon); margin-bottom: 6px; }
+.pace-block .pace-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--g-dark); margin-bottom: 3px; }
+.pace-block .pace-row .amt { font-weight: 700; }
+.pace-block .pace-total { display: flex; justify-content: space-between; align-items: baseline; font-size: 15px; font-weight: 700; color: var(--g-dark); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--g-med-beige); }
+.stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+.stat-box { background: var(--g-cream); border-radius: 6px; padding: 12px; text-align: center; }
+.stat-box .stat-val { font-family: 'Cormorant Garamond', serif; font-size: 23px; font-weight: 400; color: var(--g-dark); }
+.stat-box .stat-label { font-family: 'Roboto Condensed', sans-serif; font-size: 9px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--g-pigeon); margin-top: 2px; }
+.cat-table { width: 100%; border-collapse: collapse; }
+.cat-table th { font-family: 'Roboto Condensed', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--g-pigeon); text-align: left; padding: 0 0 8px; border-bottom: 1px solid var(--g-med-beige); }
+.cat-table th:nth-child(2), .cat-table th:nth-child(3), .cat-table th:nth-child(4) { text-align: right; }
+.cat-table td { padding: 7px 0; font-size: 13px; border-bottom: 1px solid rgba(114,100,83,0.05); }
+.cat-table td:nth-child(2), .cat-table td:nth-child(3), .cat-table td:nth-child(4) { text-align: right; font-variant-numeric: tabular-nums; }
+.cat-table td:first-child { font-weight: 400; color: var(--g-dark); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-table td:nth-child(2) { font-weight: 700; }
+.cat-table .cat-bar { display: inline-block; height: 4px; border-radius: 2px; background: var(--g-beige); margin-right: 8px; vertical-align: middle; }
+.prod-list { list-style: none; }
+.prod-list li { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px solid rgba(114,100,83,0.05); }
+.prod-list li:last-child { border-bottom: none; }
+.prod-list .prod-name { color: var(--g-dark); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prod-list .prod-amt { font-weight: 700; font-variant-numeric: tabular-nums; }
+.status-badge { display: inline-block; padding: 3px 10px; border-radius: 3px; font-family: 'Roboto Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; }
+.status-green { background: rgba(74,158,110,0.1); color: var(--g-green); }
+.status-red { background: rgba(196,86,74,0.1); color: var(--g-red); }
+.status-amber { background: rgba(212,162,78,0.1); color: var(--g-amber); }
+.dash-footer { text-align: center; padding-top: 32px; border-top: 1px solid var(--g-med-beige); margin-top: 48px; }
+.dash-footer p { font-family: 'Roboto Condensed', sans-serif; font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--g-pigeon); }
+@media (max-width: 768px) { .sc-body { grid-template-columns: 1fr; } .pacing-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="dashboard">
+  <div class="dash-header">
+    <div class="logo-wrap"><img class="logo-img" src="https://influx-site-assets.s3.us-west-2.amazonaws.com/giovamedspa.com/logos/giova-name-tagline-logo.png" alt="GIOVA"></div>
+    <div class="header-center">
+      <h1>Brooklyn Jensen</h1>
+      <div class="meta">February 2026 &bull; As of Feb 28, 2026</div>
+    </div>
+  </div>
+  <div class="welcome">
+    <h2>Welcome, Brooklyn</h2>
+    <p>Your personal performance dashboard &bull; Aesthetician</p>
+  </div>
+  <div class="scorecard">
+    <div class="sc-header">
+      <div>
+        <div class="name">Brooklyn Jensen</div>
+        <span class="status-badge status-amber" style="margin-top:6px">At Risk</span>
+      </div>
+      <div class="goal-badge">
+        <div class="goal-label">Monthly Goal</div>
+        <div class="goal-value">$6,700</div>
+      </div>
+    </div>
+    <div class="sc-progress">
+      <div class="track"><div class="fill" style="width:78.77985074626865%;background:#d4a24e"></div></div>
+      <div class="progress-info">
+        <span class="pct" style="color:#d4a24e">78.8%</span>
+        <span class="remaining">$1,422 remaining</span>
+      </div>
+    </div>
+    <div class="sc-body">
+      <div>
+        <div class="sc-section-label">Weekly Pacing</div>
+        <div class="pacing-grid">
+          <div class="pace-block">
+            <div class="pace-label">This Week</div>
+            <div class="pace-row"><span>Service</span><span class="amt">$1,510.75</span></div>
+            <div class="pace-row"><span>Product</span><span class="amt">$208.00</span></div>
+            <div class="pace-total"><span>Total</span><span>$1,718.75</span></div>
+          </div>
+          <div class="pace-block">
+            <div class="pace-label">Month to Date</div>
+            <div class="pace-row"><span>Service</span><span class="amt">$4,229.25</span></div>
+            <div class="pace-row"><span>Product</span><span class="amt">$1,049.00</span></div>
+            <div class="pace-total"><span>Total</span><span>$5,278.25</span></div>
+          </div>
+        </div>
+        <div class="stats-row">
+          <div class="stat-box"><div class="stat-val">32</div><div class="stat-label">Appointments</div></div>
+          <div class="stat-box"><div class="stat-val">26.8</div><div class="stat-label">Hours</div></div>
+          <div class="stat-box"><div class="stat-val">$165</div><div class="stat-label">Rev / Appt</div></div>
+        </div>
+        <div class="sc-section-label" style="margin-top:24px">Top Products</div><ul class="prod-list"><li><span class="prod-name">Face Reality Hydraremedy Gel Serum</span><span class="prod-amt">$135.00</span></li><li><span class="prod-name">Eye Renew Complex</span><span class="prod-amt">$120.00</span></li><li><span class="prod-name">Barrier Care Gel Cream</span><span class="prod-amt">$114.00</span></li><li><span class="prod-name">Face Reality L Mandelic Wash</span><span class="prod-amt">$105.00</span></li><li><span class="prod-name">Face Reality 8% L Mandelic Serum</span><span class="prod-amt">$84.00</span></li></ul>
+      </div>
+      <div>
+        <div class="sc-section-label">Service Breakdown</div>
+        <table class="cat-table">
+          <tr><th>Category</th><th>Revenue</th><th>Appts</th><th>Hours</th></tr>
+          <tr><td><span class="cat-bar" style="width:60px"></span>Laser & Energy</td><td>$2,125.00</td><td>17</td><td>10.4</td></tr><tr><td><span class="cat-bar" style="width:33.741176470588236px"></span>MBB Platinum $199</td><td>$1,195.00</td><td>6</td><td>5.2</td></tr><tr><td><span class="cat-bar" style="width:13.129411764705882px"></span>Skin Health & Aesthetics</td><td>$465.00</td><td>4</td><td>4.3</td></tr><tr><td><span class="cat-bar" style="width:9.748235294117647px"></span>Spa & Add-ons</td><td>$345.25</td><td>5</td><td>5.5</td></tr><tr><td><span class="cat-bar" style="width:2.795294117647059px"></span>MBB Golden $99</td><td>$99.00</td><td>1</td><td>1.0</td></tr><tr><td><span class="cat-bar" style="width:2px"></span>Functional Health</td><td>—</td><td>2</td><td>0.5</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="dash-footer">
+    <p>Gi&oacute;va Aesthetics + Wellness &bull; 192 S Main St, Kaysville, UT 84037 &bull; (385) 554-1606</p>
+    <p style="margin-top:4px;opacity:0.5">Confidential &mdash; Internal Use Only</p>
+  </div>
+</div>
+</body>
+</html>
