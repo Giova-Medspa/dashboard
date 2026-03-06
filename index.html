@@ -50,16 +50,20 @@ body { font-family: 'Lato', sans-serif; background: var(--g-vanilla); color: var
 .nav-btn.active { background: var(--g-brown); color: #fff; border-color: var(--g-brown); }
 
 /* Upload */
-.upload-section { background: #fff; border: 2px dashed var(--g-med-beige); border-radius: 10px; padding: 32px; text-align: center; margin-bottom: 32px; transition: all 0.2s; }
-.upload-section.drag-over { border-color: var(--g-teal); background: rgba(0,137,137,0.03); }
-.upload-section .upload-icon { font-size: 36px; color: var(--g-beige); margin-bottom: 12px; }
-.upload-section h3 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 21px; color: var(--g-dark); margin-bottom: 6px; }
-.upload-section p { font-size: 13px; color: var(--g-pigeon); margin-bottom: 16px; }
-.upload-section input[type=file] { display: none; }
+.upload-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(46,46,46,0.5); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+.upload-overlay.open { display: flex; }
+.upload-panel { background: #fff; border-radius: 12px; padding: 36px 40px; max-width: 580px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.2); position: relative; text-align: center; }
+.upload-panel .close-btn { position: absolute; top: 14px; right: 18px; background: none; border: none; font-size: 22px; color: var(--g-pigeon); cursor: pointer; line-height: 1; }
+.upload-panel .close-btn:hover { color: var(--g-dark); }
+.upload-drop { border: 2px dashed var(--g-med-beige); border-radius: 10px; padding: 28px; margin-bottom: 20px; transition: all 0.2s; }
+.upload-drop.drag-over { border-color: var(--g-teal); background: rgba(0,137,137,0.03); }
+.upload-drop .upload-icon { font-size: 36px; color: var(--g-beige); margin-bottom: 10px; }
+.upload-drop h3 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 21px; color: var(--g-dark); margin-bottom: 6px; }
+.upload-drop input[type=file] { display: none; }
 .upload-btn { display: inline-block; padding: 10px 24px; border: 1px solid var(--g-beige); background: transparent; color: var(--g-brown); font-family: 'Roboto Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; cursor: pointer; border-radius: 4px; transition: all 0.2s; }
 .upload-btn:hover { background: var(--g-brown); color: #fff; border-color: var(--g-brown); }
 .upload-status { margin-top: 12px; font-size: 13px; min-height: 20px; }
-.month-chips { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.month-chips { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
 .month-chip { padding: 5px 12px; background: var(--g-cream); border-radius: 3px; font-family: 'Roboto Condensed', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 1px; color: var(--g-brown); display: inline-flex; align-items: center; gap: 6px; }
 .month-chip .del { cursor: pointer; opacity: 0.5; font-size: 14px; }
 .month-chip .del:hover { opacity: 1; color: var(--g-red); }
@@ -474,30 +478,40 @@ function renderHeader(data) {
 /* ============================================
    UPLOAD SECTION
    ============================================ */
-function renderUpload() {
+const UPLOAD_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+
+function renderUploadModal() {
   const keys = Object.keys(STATE.months).sort();
-  return `<div class="upload-section" id="uploadZone">
-    <div class="upload-icon">\u2191</div>
-    <h3>Upload Monthly Revenue Report</h3>
-    <div style="text-align:left;max-width:540px;margin:0 auto 20px;background:var(--g-cream);border-radius:8px;padding:20px 24px;">
-      <div style="font-family:'Roboto Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--g-brown);margin-bottom:12px;">How to Add a New Month</div>
-      <ol style="font-size:14px;color:var(--g-dark);padding-left:20px;line-height:1.8;">
-        <li><strong>Export the report</strong> from Boulevard as an Excel file (.xlsx) at the end of each month.</li>
-        <li><strong>Do not rename or edit the file.</strong> The dashboard reads the dates inside the spreadsheet to figure out which month it belongs to.</li>
-        <li>Click the <strong>"Choose File"</strong> button below (or drag the file into this box).</li>
-        <li>Wait for the green <strong>"[Month] loaded successfully!"</strong> message to appear.</li>
-        <li>That's it! Use the <strong>month dropdown</strong> above to switch between months anytime.</li>
-      </ol>
-      <div style="margin-top:14px;padding:12px 16px;background:rgba(0,137,137,0.06);border-left:3px solid var(--g-teal);border-radius:0 6px 6px 0;font-size:13px;color:var(--g-dark);line-height:1.6;">
-        <strong>Good to know:</strong> Each file is one month. Upload one file per month. If you upload the same month twice, the new file replaces the old one. All data stays saved in your browser — you won't lose it when you close the page.
+  return `<div class="upload-overlay" id="uploadOverlay" onclick="if(event.target===this)closeUpload()">
+    <div class="upload-panel">
+      <button class="close-btn" onclick="closeUpload()">&times;</button>
+      <div class="upload-drop" id="uploadZone">
+        <div class="upload-icon">\u2191</div>
+        <h3>Upload Monthly Revenue Report</h3>
+        <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFile(this.files[0])">
+        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Choose File</button>
+        <div class="upload-status" id="uploadStatus"></div>
       </div>
+      <div style="text-align:left;background:var(--g-cream);border-radius:8px;padding:20px 24px;margin-bottom:16px;">
+        <div style="font-family:'Roboto Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--g-brown);margin-bottom:12px;">How to Add a New Month</div>
+        <ol style="font-size:14px;color:var(--g-dark);padding-left:20px;line-height:1.8;">
+          <li><strong>Export the report</strong> from Boulevard as an Excel file (.xlsx) at the end of each month.</li>
+          <li><strong>Do not rename or edit the file.</strong> The dashboard reads the dates inside the spreadsheet to figure out which month it belongs to.</li>
+          <li>Click <strong>"Choose File"</strong> above (or drag the file into the box).</li>
+          <li>Wait for the green <strong>"[Month] loaded successfully!"</strong> message.</li>
+          <li>That's it! Close this window and use the <strong>month dropdown</strong> to switch between months.</li>
+        </ol>
+        <div style="margin-top:14px;padding:12px 16px;background:rgba(0,137,137,0.06);border-left:3px solid var(--g-teal);border-radius:0 6px 6px 0;font-size:13px;color:var(--g-dark);line-height:1.6;">
+          <strong>Good to know:</strong> Each file is one month. Upload one file per month. If you upload the same month twice, the new file replaces the old one. All data stays saved in your browser — you won't lose it when you close the page.
+        </div>
+      </div>
+      ${keys.length > 0 ? `<div><div style="font-family:'Roboto Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--g-pigeon);margin-bottom:8px;">Months Loaded</div><div class="month-chips">${keys.map(k => `<span class="month-chip">${monthLabel(k)} <span class="del" onclick="deleteMonth('${k}')">&times;</span></span>`).join('')}</div></div>` : ''}
     </div>
-    <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFile(this.files[0])">
-    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Choose File</button>
-    <div class="upload-status" id="uploadStatus"></div>
-    ${keys.length > 0 ? `<div style="margin-top:16px;"><div style="font-family:'Roboto Condensed',sans-serif;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--g-pigeon);margin-bottom:8px;">Months Loaded</div><div class="month-chips">${keys.map(k => `<span class="month-chip">${monthLabel(k)} <span class="del" onclick="deleteMonth('${k}')">&times;</span></span>`).join('')}</div></div>` : ''}
   </div>`;
 }
+
+function openUpload() { document.getElementById('uploadOverlay').classList.add('open'); setupDragDrop(); }
+function closeUpload() { document.getElementById('uploadOverlay').classList.remove('open'); }
 
 /* ============================================
    MAIN RENDER
@@ -519,8 +533,9 @@ function renderExecutive() {
       <a class="nav-btn active" href="#">All Providers</a>
       ${data.providers.map(p=>`<a class="nav-btn" href="#${slug(p.name)}">${p.name}</a>`).join('')}
     </div>
-    ${renderUpload()}
+    ${renderUploadModal()}
     <div class="download-bar">
+      <button class="dl-btn" onclick="openUpload()">${UPLOAD_ICON} Upload</button>
       <button class="dl-btn" onclick="downloadAll()">${DL_ICON} Download All</button>
       <select id="provSelect" style="padding:8px 12px;border:1px solid var(--g-beige);border-radius:4px;font-family:'Roboto Condensed',sans-serif;font-size:12px;background:#fff;color:var(--g-dark);cursor:pointer;">
         <option value="">By Provider...</option>
