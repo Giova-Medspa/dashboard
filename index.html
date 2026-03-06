@@ -182,7 +182,23 @@ body { font-family: 'Lato', sans-serif; background: var(--g-vanilla); color: var
 </style>
 </head>
 <body>
-<div class="dashboard" id="app"></div>
+<!-- PIN LOGIN GATE -->
+<div id="loginGate" style="display:flex;position:fixed;top:0;left:0;right:0;bottom:0;background:var(--g-vanilla);z-index:9999;align-items:center;justify-content:center;">
+  <div style="text-align:center;max-width:380px;padding:40px;">
+    <div style="display:inline-flex;align-items:center;justify-content:center;background:#3e3e3e;border-radius:8px;padding:14px 24px;margin-bottom:28px;">
+      <img src="https://influx-site-assets.s3.us-west-2.amazonaws.com/giovamedspa.com/logos/giova-name-tagline-logo.png" style="height:48px;" alt="GIOVA">
+    </div>
+    <h2 style="font-family:'Cormorant Garamond',serif;font-weight:400;font-size:28px;color:var(--g-dark);margin-bottom:6px;">Dashboard Access</h2>
+    <p style="font-size:13px;color:var(--g-pigeon);margin-bottom:24px;">Enter your PIN to continue</p>
+    <input id="pinInput" type="password" maxlength="6" placeholder="Enter PIN" autocomplete="off"
+      style="width:200px;padding:12px 16px;border:1px solid var(--g-med-beige);border-radius:6px;font-family:'Roboto Condensed',sans-serif;font-size:18px;letter-spacing:8px;text-align:center;color:var(--g-dark);background:#fff;outline:none;"
+      onkeydown="if(event.key==='Enter')checkPin()">
+    <br>
+    <button onclick="checkPin()" style="margin-top:16px;padding:10px 32px;border:1px solid var(--g-beige);background:var(--g-brown);color:#fff;font-family:'Roboto Condensed',sans-serif;font-size:11px;font-weight:600;letter-spacing:3px;text-transform:uppercase;cursor:pointer;border-radius:4px;">Enter</button>
+    <p id="pinError" style="margin-top:12px;font-size:12px;color:var(--g-red);min-height:18px;"></p>
+  </div>
+</div>
+<div class="dashboard" id="app" style="display:none;"></div>
 <script>
 /* ============================================
    CONSTANTS & STATE
@@ -540,7 +556,7 @@ function renderExecutive() {
   app.innerHTML = `${renderHeader(data)}
     <div class="nav-bar">
       <a class="nav-btn active" href="#">All Providers</a>
-      ${data.providers.map(p=>`<a class="nav-btn" href="#${slug(p.name)}">${p.name}</a>`).join('')}
+      ${data.providers.map(p=>`<a class="nav-btn" href="${SECURE_URLS[slug(p.name)]||'#'+slug(p.name)}" ${SECURE_URLS[slug(p.name)]?'target="_blank"':''}>${p.name}</a>`).join('')}
     </div>
     ${renderUploadModal()}
     <div class="download-bar">
@@ -568,7 +584,7 @@ function renderExecutive() {
     <div class="section-label">Provider Rankings</div>
     <div class="rankings">
       <div class="rank-header"><span>#</span><span>Provider</span><span>Progress</span><span>Revenue</span><span>% Goal</span></div>
-      ${ranked.map((p,i)=>{const t=p.mtd.service+p.mtd.product;const r=t/p.goal;const s=getStatus(r);return`<div class="rank-row" onclick="location.hash='${slug(p.name)}'"><div class="rank-num">${i+1}</div><div class="rank-name">${p.name}<span class="title">${p.role}</span></div><div class="rank-bar"><div class="rank-bar-fill" style="width:${Math.min(r*100,100)}%;background:${s.color}"></div></div><div class="rank-rev">${fmt(t)}</div><div class="rank-pct" style="color:${s.color}">${pct(r)}</div></div>`;}).join('')}
+      ${ranked.map((p,i)=>{const t=p.mtd.service+p.mtd.product;const r=t/p.goal;const s=getStatus(r);const su=SECURE_URLS[slug(p.name)];return`<div class="rank-row" onclick="${su?`window.open('${su}','_blank')`:`location.hash='${slug(p.name)}'`}"><div class="rank-num">${i+1}</div><div class="rank-name">${p.name}<span class="title">${p.role}</span></div><div class="rank-bar"><div class="rank-bar-fill" style="width:${Math.min(r*100,100)}%;background:${s.color}"></div></div><div class="rank-rev">${fmt(t)}</div><div class="rank-pct" style="color:${s.color}">${pct(r)}</div></div>`;}).join('')}
     </div>
     <div class="section-label">Provider Scorecards</div>
     <div class="scorecards">${ranked.map(p=>renderScorecard(p,showWeekly)).join('')}</div>
@@ -587,7 +603,7 @@ function renderProvider(provSlug) {
   document.getElementById('app').innerHTML = `${renderHeader(data)}
     <div class="nav-bar">
       <a class="nav-btn" href="#">All Providers</a>
-      ${data.providers.map(pr=>`<a class="nav-btn ${slug(pr.name)===provSlug?'active':''}" href="#${slug(pr.name)}">${pr.name}</a>`).join('')}
+      ${data.providers.map(pr=>`<a class="nav-btn ${slug(pr.name)===provSlug?'active':''}" href="${SECURE_URLS[slug(pr.name)]||'#'+slug(pr.name)}" ${SECURE_URLS[slug(pr.name)]?'target="_blank"':''}>${pr.name}</a>`).join('')}
     </div>
     <div class="download-bar">
       <button class="dl-btn" onclick="downloadProvider('${slug(p.name)}')">${DL_ICON} Download Scorecard</button>
@@ -657,13 +673,41 @@ function downloadCard(el,name) { html2canvas(el,{scale:2,backgroundColor:'#f4efe
 function downloadProvider(s) { const el=document.getElementById('card-'+s); if(el) downloadCard(el,'GIOVA-'+s+'.png'); }
 function downloadSelected() { const s=document.getElementById('provSelect'); if(s&&s.value) downloadProvider(s.value); }
 function downloadAll() { document.querySelectorAll('.scorecard').forEach((el,i)=>setTimeout(()=>downloadCard(el,'GIOVA-'+el.id.replace('card-','')+'.png'),i*500)); }
-function shareProvider(s) { const u=SECURE_URLS[s]||location.origin+location.pathname+'#'+s; navigator.clipboard.writeText(u).then(()=>alert('Secure link copied!\n'+u)); }
+function shareProvider(s) { const u=SECURE_URLS[s]||location.origin+location.pathname+'#'+s; navigator.clipboard.writeText(u).then(()=>alert('Secure link copied!\\n'+u)); }
+
+/* ============================================
+   PIN AUTH
+   ============================================ */
+const ADMIN_PIN = '2026';
+const AUTH_KEY = 'giova-auth';
+
+function checkPin() {
+  const pin = document.getElementById('pinInput').value;
+  if(pin === ADMIN_PIN) {
+    sessionStorage.setItem(AUTH_KEY, 'true');
+    unlockDashboard();
+  } else {
+    document.getElementById('pinError').textContent = 'Incorrect PIN';
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinInput').focus();
+  }
+}
+
+function unlockDashboard() {
+  document.getElementById('loginGate').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  loadState();
+  route();
+}
 
 /* ============================================
    INIT
    ============================================ */
-loadState();
-route();
+if(sessionStorage.getItem(AUTH_KEY) === 'true') {
+  unlockDashboard();
+} else {
+  document.getElementById('pinInput').focus();
+}
 </script>
 </body>
 </html>
