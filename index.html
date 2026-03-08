@@ -763,14 +763,14 @@ function shareProvider(s) { const u=SECURE_URLS[s]||location.origin+location.pat
 /* ============================================
    PIN AUTH
    ============================================ */
-const ADMIN_PIN = '2046';
-const AUTH_KEY = 'giova-auth';
-
 function checkPin() {
-  const pin = document.getElementById('pinInput').value;
-  if(pin === ADMIN_PIN) {
-    sessionStorage.setItem(AUTH_KEY, 'true');
-    unlockDashboard();
+  var pin = document.getElementById('pinInput').value;
+  if (pin === '2046') {
+    document.getElementById('loginGate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadState();
+    route();
+    loadFromGoogleSheets();
   } else {
     document.getElementById('pinError').textContent = 'Incorrect PIN';
     document.getElementById('pinInput').value = '';
@@ -778,22 +778,10 @@ function checkPin() {
   }
 }
 
-function unlockDashboard() {
-  document.getElementById('loginGate').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  loadState();
-  route();
-  loadFromGoogleSheets();
-}
-
 /* ============================================
    INIT
    ============================================ */
-if(sessionStorage.getItem(AUTH_KEY) === 'true') {
-  unlockDashboard();
-} else {
-  document.getElementById('pinInput').focus();
-}
+document.getElementById('pinInput').focus();
 </script>
 </body>
 </html>
