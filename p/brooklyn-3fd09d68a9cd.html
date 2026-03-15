@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Brooklyn Jensen — GIOVA Dashboard</title>
 <meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Roboto+Condensed:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -68,9 +69,25 @@ body { font-family: 'Lato', sans-serif; background: var(--g-vanilla); color: var
 .dash-footer { text-align: center; padding-top: 32px; border-top: 1px solid var(--g-med-beige); margin-top: 48px; }
 .dash-footer p { font-family: 'Roboto Condensed', sans-serif; font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--g-pigeon); }
 @media (max-width: 768px) { .sc-body { grid-template-columns: 1fr; } .pacing-grid { grid-template-columns: 1fr; } }
+.commission-inline { background: var(--g-cream); border-radius: 6px; padding: 12px 16px; }
+.commission-inline .comm-total { font-family: 'Cormorant Garamond', serif; font-size: 24px; color: var(--g-dark); }
+.commission-inline .comm-breakdown { font-size: 12px; color: var(--g-pigeon); margin-top: 4px; }
 </style>
 </head>
 <body>
+<script>
+(function() {
+  var pin = sessionStorage.getItem('giova_pin');
+  if (pin !== '2046') {
+    var entered = prompt('Enter PIN to view dashboard:');
+    if (entered !== '2046') {
+      document.body.innerHTML = '<h1>Access Denied</h1>';
+      return;
+    }
+    sessionStorage.setItem('giova_pin', entered);
+  }
+})();
+</script>
 <div class="dashboard">
   <div class="dash-header">
     <div class="logo-wrap"><img class="logo-img" src="https://influx-site-assets.s3.us-west-2.amazonaws.com/giovamedspa.com/logos/giova-name-tagline-logo.png" alt="GIOVA"></div>
@@ -124,6 +141,10 @@ body { font-family: 'Lato', sans-serif; background: var(--g-vanilla); color: var
           <div class="stat-box"><div class="stat-val">$165</div><div class="stat-label">Rev / Appt</div></div>
         </div>
         <div class="sc-section-label" style="margin-top:24px">Top Products</div><ul class="prod-list"><li><span class="prod-name">Face Reality Hydraremedy Gel Serum</span><span class="prod-amt">$135.00</span></li><li><span class="prod-name">Eye Renew Complex</span><span class="prod-amt">$120.00</span></li><li><span class="prod-name">Barrier Care Gel Cream</span><span class="prod-amt">$114.00</span></li><li><span class="prod-name">Face Reality L Mandelic Wash</span><span class="prod-amt">$105.00</span></li><li><span class="prod-name">Face Reality 8% L Mandelic Serum</span><span class="prod-amt">$84.00</span></li></ul>
+        <div class="sc-section-label" style="margin-top:24px">Commission</div>
+        <div style="background:var(--g-cream);border-radius:6px;padding:12px 16px;text-align:center;color:var(--g-pigeon);font-size:13px">
+          Commission data will appear here after pay period processing
+        </div>
       </div>
       <div>
         <div class="sc-section-label">Service Breakdown</div>

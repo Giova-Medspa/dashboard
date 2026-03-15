@@ -27,10 +27,10 @@ body { font-family: 'Lato', sans-serif; background: var(--g-vanilla); color: var
 .dashboard { max-width: 1200px; margin: 0 auto; padding: 40px 24px 80px; }
 
 /* Header */
-.dash-header { position: relative; margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--g-med-beige); }
-.logo-wrap { position: absolute; left: 0; top: 50%; transform: translateY(-50%); }
+.dash-header { display: flex; align-items: center; margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--g-med-beige); }
+.logo-wrap { display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .logo-wrap .logo-img { height: 108px; width: auto; display: block; }
-.header-center { text-align: center; }
+.header-center { flex: 1; text-align: center; padding-right: 160px; }
 .dash-header h1 { font-family: 'Cormorant Garamond', serif; font-weight: 400; font-size: 37px; color: var(--g-dark); letter-spacing: 2px; margin-bottom: 4px; }
 .dash-header .meta { font-family: 'Roboto Condensed', sans-serif; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: var(--g-pigeon); }
 
@@ -67,6 +67,22 @@ body { font-family: 'Lato', sans-serif; background: var(--g-vanilla); color: var
 .month-chip { padding: 5px 12px; background: var(--g-cream); border-radius: 3px; font-family: 'Roboto Condensed', sans-serif; font-size: 10px; font-weight: 600; letter-spacing: 1px; color: var(--g-brown); display: inline-flex; align-items: center; gap: 6px; }
 .month-chip .del { cursor: pointer; opacity: 0.5; font-size: 14px; }
 .month-chip .del:hover { opacity: 1; color: var(--g-red); }
+
+/* Commission Summary */
+.commission-section { background: #fff; border-radius: 8px; padding: 28px; margin-bottom: 48px; box-shadow: 0 2px 12px rgba(0,0,0,0.04); border: 1px solid rgba(114,100,83,0.08); }
+.commission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 16px; }
+.commission-card { background: var(--g-cream); border-radius: 6px; padding: 16px; }
+.commission-card .comm-name { font-family: 'Roboto Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: var(--g-pigeon); margin-bottom: 6px; }
+.commission-card .comm-total { font-family: 'Cormorant Garamond', serif; font-size: 28px; color: var(--g-dark); }
+.commission-card .comm-breakdown { font-size: 12px; color: var(--g-pigeon); margin-top: 6px; }
+.commission-card .comm-breakdown span { display: block; margin-top: 2px; }
+.commission-card .comm-type { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 3px; font-family: 'Roboto Condensed', sans-serif; font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+.comm-type-salary { background: var(--g-sky); color: var(--g-pigeon); }
+.comm-type-commission { background: rgba(0,137,137,0.1); color: var(--g-teal); }
+.commission-total-bar { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--g-med-beige); }
+.commission-total-bar .total-label { font-family: 'Roboto Condensed', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; color: var(--g-pigeon); }
+.commission-total-bar .total-value { font-family: 'Cormorant Garamond', serif; font-size: 33px; color: var(--g-dark); }
+.commission-unavailable { text-align: center; padding: 20px; color: var(--g-pigeon); font-size: 13px; }
 
 /* Download */
 .download-bar { display: flex; justify-content: center; gap: 12px; margin-bottom: 36px; flex-wrap: wrap; }
@@ -210,6 +226,17 @@ const LIVE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 /* Google Sheets Live Data */
 const SHEET_ID = '1sNhLPPN68FUp4XwsOIweUN_Uz68beljvAxGNBkqFvwg';
 const PROVIDER_ROLES = {'Dr Silkey':'Medical Director','Summer Faulkner':'Injector','Riley Packer':'Aesthetician','Brooklyn Jensen':'Aesthetician','Sadie Zeidler':'Aesthetician'};
+
+/* Commission workbook — populated by setup-commission-workbook.js */
+const COMMISSION_SHEET_ID = '188Fhz1Skn1oO4xM7fszoAI0TJw5XksocwsrQJmFXbxg';
+let COMMISSION_DATA = null; // { providers: { 'Summer Faulkner': { service, product, package, tips, grand, type }, ... }, grandTotal }
+const COMMISSION_PROVIDER_MAP = {
+  'Summer Faulkner': { tab: 'Report_Summer', type: 'commission' },
+  'Dr Silkey': { tab: 'Report_DrSilkey', type: 'salary' },
+  'Riley Packer': { tab: 'Report_Riley', type: 'salary' },
+  'Brooklyn Jensen': { tab: 'Report_Brooklyn', type: 'commission' },
+  'Sadie Zeidler': { tab: 'Report_Sadie', type: 'commission' }
+};
 
 /* Secure provider dashboard URLs — each provider sees ONLY their own data */
 const SECURE_URLS = {
@@ -371,17 +398,8 @@ async function loadFromGoogleSheets() {
     const toJson = csv => { const wb = XLSX.read(csv, {type:'string'}); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]); };
     const toArr = csv => { const wb = XLSX.read(csv, {type:'string'}); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}); };
     const money = v => { if (typeof v === 'number') return v; if (!v) return 0; return Number(String(v).replace(/[$,]/g, '')) || 0; };
-    // Normalize dates: SheetJS may return Excel serial numbers instead of strings
-    const normDate = v => {
-      if (typeof v === 'string') return v;
-      if (typeof v === 'number' && v > 40000 && v < 60000) {
-        const d = new Date((v - 25569) * 86400000);
-        return d.toISOString().slice(0, 10) + ' 0:00:00';
-      }
-      return v;
-    };
-    const raw = toJson(csvs[1]).map(r => { if (r['SaleDate Date'] != null) r['SaleDate Date'] = normDate(r['SaleDate Date']); return r; });
-    const prod = toJson(csvs[2]).map(r => { if (r['SaleDate Date'] != null) r['SaleDate Date'] = normDate(r['SaleDate Date']); return r; });
+    const raw = toJson(csvs[1]);
+    const prod = toJson(csvs[2]);
     const wpRows = toArr(csvs[0]);
 
     // Detect ALL unique months from date rows
@@ -557,8 +575,7 @@ async function loadFromGoogleSheets() {
     saveState();
     route();
   } catch (e) {
-    console.error('Google Sheets live fetch failed, using cached data:', e);
-    throw e;
+    console.warn('Google Sheets live fetch failed, using cached data:', e);
   }
 }
 
@@ -610,11 +627,95 @@ function aggregateMonths(keys) {
   }
 
   const teamGoal = months.reduce((s,m) => s + m.teamGoal, 0);
-  const yr = months[0].key.split('-')[0];
-  const label = months.length <= 3 ? 'Q' + Math.ceil(parseInt(months[0].key.split('-')[1])/3) + ' ' + yr
-    : yr + ' Year to Date';
+  const label = months.length <= 3 ? 'Q' + Math.ceil(parseInt(months[0].key.split('-')[1])/3) + ' ' + months[0].key.split('-')[0]
+    : months[0].key.split('-')[0] + ' Annual';
 
   return { month: label, key: 'agg', asOf: months[months.length-1].asOf, weekEnding: months[months.length-1].weekEnding, teamGoal, providers };
+}
+
+/* ============================================
+   COMMISSION DATA LOADING
+   ============================================ */
+async function loadCommissionData() {
+  if (!COMMISSION_SHEET_ID) return;
+  try {
+    const BASE = 'https://docs.google.com/spreadsheets/d/' + COMMISSION_SHEET_ID + '/gviz/tq?tqx=out:csv';
+    const resp = await fetch(BASE + '&sheet=' + encodeURIComponent('Commission_Summary'));
+    if (!resp.ok) return;
+    const csv = resp.text();
+    const wb = XLSX.read(await csv, {type:'string'});
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    if (!rows.length) return;
+
+    const money = function(v) { if (typeof v === 'number') return v; if (!v) return 0; return Number(String(v).replace(/[$,]/g, '')) || 0; };
+    var providers = {};
+    var grandTotal = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var name = String(r['Provider'] || '').trim();
+      if (!name) continue;
+      var mapEntry = COMMISSION_PROVIDER_MAP[name];
+      var svc = money(r['Service']);
+      var prod = money(r['Product']);
+      var pkg = money(r['Package']);
+      var tips = money(r['Tips']);
+      var total = money(r['Total']);
+      providers[name] = { service: svc, product: prod, package: pkg, tips: tips, grand: total, type: mapEntry ? mapEntry.type : 'commission' };
+      grandTotal += total;
+    }
+    COMMISSION_DATA = { providers: providers, grandTotal: grandTotal };
+  } catch (e) {
+    // Commission data load is non-fatal — dashboard works without it
+  }
+}
+
+function renderCommissionSummary() {
+  if (!COMMISSION_DATA) {
+    return '<div class="commission-section"><div class="section-label">Commission Summary</div><div class="commission-unavailable">Commission data not yet available. Run commission processing in Grace to populate.</div></div>';
+  }
+  var entries = Object.entries(COMMISSION_DATA.providers);
+  var cards = entries.map(function(e) {
+    var name = e[0]; var d = e[1];
+    var typeClass = d.type === 'salary' ? 'comm-type-salary' : 'comm-type-commission';
+    var typeLabel = d.type === 'salary' ? 'Salary' : 'Commission';
+    return '<div class="commission-card">' +
+      '<div class="comm-name">' + name + '</div>' +
+      '<div class="comm-total">' + fmtD(d.grand) + '</div>' +
+      '<div class="comm-breakdown">' +
+        '<span>Service: ' + fmtD(d.service) + '</span>' +
+        '<span>Product: ' + fmtD(d.product) + '</span>' +
+        (d.package > 0 ? '<span>Package: ' + fmtD(d.package) + '</span>' : '') +
+        '<span>Tips: ' + fmtD(d.tips) + '</span>' +
+      '</div>' +
+      '<span class="comm-type ' + typeClass + '">' + typeLabel + '</span>' +
+    '</div>';
+  }).join('');
+
+  return '<div class="commission-section">' +
+    '<div class="section-label">Commission Summary</div>' +
+    '<div class="commission-grid">' + cards + '</div>' +
+    '<div class="commission-total-bar">' +
+      '<div class="total-label">Total Commission Payroll</div>' +
+      '<div class="total-value">' + fmtD(COMMISSION_DATA.grandTotal) + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderProviderCommission(providerName) {
+  if (!COMMISSION_DATA || !COMMISSION_DATA.providers[providerName]) return '';
+  var d = COMMISSION_DATA.providers[providerName];
+  var typeClass = d.type === 'salary' ? 'comm-type-salary' : 'comm-type-commission';
+  var typeLabel = d.type === 'salary' ? 'Salary' : 'Commission';
+  return '<div class="sc-section-label" style="margin-top:24px">Commission</div>' +
+    '<div style="background:var(--g-cream);border-radius:6px;padding:12px 16px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:baseline">' +
+        '<span class="comm-type ' + typeClass + '">' + typeLabel + '</span>' +
+        '<span style="font-family:Cormorant Garamond,serif;font-size:24px;color:var(--g-dark)">' + fmtD(d.grand) + '</span>' +
+      '</div>' +
+      '<div class="comm-breakdown">' +
+        '<span>Service: ' + fmtD(d.service) + ' | Product: ' + fmtD(d.product) + ' | Tips: ' + fmtD(d.tips) + '</span>' +
+      '</div>' +
+    '</div>';
 }
 
 function getViewData() {
@@ -623,20 +724,12 @@ function getViewData() {
 
   const ci = keys.indexOf(STATE.currentMonth);
   if(STATE.period === 'quarter') {
-    // Calendar quarter: Q1=Jan-Mar, Q2=Apr-Jun, Q3=Jul-Sep, Q4=Oct-Dec
-    const [y, m] = STATE.currentMonth.split('-');
-    const qStart = Math.floor((parseInt(m) - 1) / 3) * 3 + 1;
-    const qKeys = keys.filter(k => {
-      const km = parseInt(k.split('-')[1]);
-      return k.startsWith(y) && km >= qStart && km <= qStart + 2;
-    });
-    return aggregateMonths(qKeys.length > 0 ? qKeys : [STATE.currentMonth]);
+    const start = Math.max(0, ci - 2);
+    return aggregateMonths(keys.slice(start, ci + 1));
   }
   if(STATE.period === 'year') {
-    // Year to date: all months in the selected year up through selected month
-    const y = STATE.currentMonth.split('-')[0];
-    const ytdKeys = keys.filter(k => k.startsWith(y) && k <= STATE.currentMonth);
-    return aggregateMonths(ytdKeys.length > 0 ? ytdKeys : [STATE.currentMonth]);
+    const start = Math.max(0, ci - 11);
+    return aggregateMonths(keys.slice(start, ci + 1));
   }
   return STATE.months[STATE.currentMonth];
 }
@@ -656,7 +749,7 @@ function renderScorecard(p, showWeekly) {
 
   return `<div class="scorecard" id="card-${slug(p.name)}">
     <div class="sc-header"><div><div class="name">${p.name}</div><span class="status-badge ${st.cls}" style="margin-top:6px">${st.text}</span></div>
-      <div class="goal-badge"><div class="goal-label">${STATE.period === 'month' ? 'Monthly' : STATE.period === 'quarter' ? 'Quarterly' : 'YTD'} Goal</div><div class="goal-value">${fmt(p.goal)}</div></div></div>
+      <div class="goal-badge"><div class="goal-label">${STATE.period === 'month' ? 'Monthly' : STATE.period === 'quarter' ? 'Quarterly' : 'Annual'} Goal</div><div class="goal-value">${fmt(p.goal)}</div></div></div>
     <div class="sc-progress"><div class="track"><div class="fill" style="width:${Math.min(ratio*100,100)}%;background:${st.color}"></div></div>
       <div class="progress-info"><span class="pct" style="color:${st.color}">${pct(ratio)}</span><span class="remaining">${remaining>0?fmt(remaining)+' remaining':fmt(Math.abs(remaining))+' over goal'}</span></div></div>
     <div class="sc-body">
@@ -683,6 +776,7 @@ function renderScorecard(p, showWeekly) {
         </div>
         ${(p.topProducts||[]).length > 0 ? `<div class="sc-section-label" style="margin-top:24px">Top Products</div>
           <ul class="prod-list">${p.topProducts.slice(0,6).map(pr => `<li><span class="prod-name">${pr.name}</span><span class="prod-amt">${fmtD(pr.amount)}</span></li>`).join('')}</ul>` : ''}
+        ${renderProviderCommission(p.name)}
       </div>
       <div>
         <div class="sc-section-label">Service Breakdown</div>
@@ -711,7 +805,7 @@ function renderHeader(data) {
   </div>
   <div class="controls-bar">
     <div class="period-tabs">
-      ${['month','quarter','year'].map(p => `<button class="period-tab ${STATE.period===p?'active':''}" onclick="setPeriod('${p}')">${p==='month'?'Monthly':p==='quarter'?'Quarterly':'Year to Date'}</button>`).join('')}
+      ${['month','quarter','year'].map(p => `<button class="period-tab ${STATE.period===p?'active':''}" onclick="setPeriod('${p}')">${p==='month'?'Monthly':p==='quarter'?'Quarterly':'Annual'}</button>`).join('')}
     </div>
     <select class="month-select" onchange="setMonth(this.value)">
       ${keys.map(k => `<option value="${k}" ${k===STATE.currentMonth?'selected':''}>${monthLabel(k)}</option>`).join('')}
@@ -805,6 +899,7 @@ function renderExecutive() {
       <div class="rank-header"><span>#</span><span>Provider</span><span>Progress</span><span>Revenue</span><span>% Goal</span></div>
       ${ranked.map((p,i)=>{const t=p.mtd.service+p.mtd.product;const r=t/p.goal;const s=getStatus(r);const su=SECURE_URLS[slug(p.name)];return`<div class="rank-row" onclick="${su?`window.open('${su}','_blank')`:`location.hash='${slug(p.name)}'`}"><div class="rank-num">${i+1}</div><div class="rank-name">${p.name}<span class="title">${p.role}</span></div><div class="rank-bar"><div class="rank-bar-fill" style="width:${Math.min(r*100,100)}%;background:${s.color}"></div></div><div class="rank-rev">${fmt(t)}</div><div class="rank-pct" style="color:${s.color}">${pct(r)}</div></div>`;}).join('')}
     </div>
+    ${renderCommissionSummary()}
     <div class="section-label">Provider Scorecards</div>
     <div class="scorecards">${ranked.map(p=>renderScorecard(p,showWeekly)).join('')}</div>
     <div class="dash-footer"><p>Gi&oacute;va Aesthetics + Wellness &bull; 192 S Main St, Kaysville, UT 84037 &bull; (385) 554-1606</p><p style="margin-top:4px;opacity:0.5">Confidential &mdash; Internal Use Only</p></div>`;
@@ -900,15 +995,12 @@ function shareProvider(s) { const u=SECURE_URLS[s]||location.origin+location.pat
 function checkPin() {
   var pin = document.getElementById('pinInput').value;
   if (pin === '2046') {
-    // Clear stale cache if ?reset in URL
-    if (location.search.includes('reset')) {
-      localStorage.removeItem('giova-dashboard');
-    }
     document.getElementById('loginGate').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     loadState();
     route();
     loadFromGoogleSheets();
+    loadCommissionData().then(function() { if (COMMISSION_DATA) route(); });
   } else {
     document.getElementById('pinError').textContent = 'Incorrect PIN';
     document.getElementById('pinInput').value = '';
