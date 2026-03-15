@@ -129,9 +129,36 @@ body { font-family: 'Lato', sans-serif; background: var(--g-vanilla); color: var
         </div>
         <div class="sc-section-label" style="margin-top:24px">Top Products</div><ul class="prod-list"><li><span class="prod-name">Elta MD UV Daily SPF 40</span><span class="prod-amt">$78.00</span></li><li><span class="prod-name">Barrier Care Gel Cream</span><span class="prod-amt">$76.00</span></li><li><span class="prod-name">Face Reality Glow-Tone Serum</span><span class="prod-amt">$62.00</span></li><li><span class="prod-name">Hyacyn Active</span><span class="prod-amt">$60.00</span></li><li><span class="prod-name">Face Reality Hydraremedy Gel Serum</span><span class="prod-amt">$45.00</span></li></ul>
         <div class="sc-section-label" style="margin-top:24px">Commission</div>
-        <div style="background:var(--g-cream);border-radius:6px;padding:12px 16px;text-align:center;color:var(--g-pigeon);font-size:13px">
-          Commission data will appear here after pay period processing
+        <div id="comm-data" style="background:var(--g-cream);border-radius:6px;padding:12px 16px;text-align:center;color:var(--g-pigeon);font-size:13px">
+          Loading commission data...
         </div>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script>
+(function(){
+  var SHEET_ID='188Fhz1Skn1oO4xM7fszoAI0TJw5XksocwsrQJmFXbxg';
+  var PROVIDER='Riley Packer';
+  var el=document.getElementById('comm-data');
+  fetch('https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:csv&sheet=Commission_Summary')
+    .then(function(r){if(!r.ok)throw new Error();return r.text()})
+    .then(function(csv){
+      var wb=XLSX.read(csv,{type:'string'});
+      var rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      var m=function(v){if(typeof v==='number')return v;if(!v)return 0;return Number(String(v).replace(/[$,]/g,''))||0;};
+      var f=function(n){return'$'+n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');};
+      var row=rows.find(function(r){var p=String(r['Provider']||'').trim();if(p===PROVIDER)return true;var parts=p.split(',');if(parts.length===2)return(parts[1].trim()+' '+parts[0].trim())===PROVIDER;return false;});
+      if(!row){el.textContent='Commission data not yet available.';return;}
+      var svc=m(row['Service']),prod=m(row['Product']),pkg=m(row['Package']),tips=m(row['Tips']),total=m(row['Total']);
+      el.style.textAlign='left';el.style.color='var(--g-dark)';
+      el.innerHTML='<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:Cormorant Garamond,serif;font-size:24px">'+f(total)+'</span></div>'
+        +'<div style="font-size:12px;color:var(--g-pigeon);margin-top:4px">'
+        +'<span style="display:block;margin-top:2px">Service: '+f(svc)+'</span>'
+        +'<span style="display:block;margin-top:2px">Product: '+f(prod)+'</span>'
+        +(pkg>0?'<span style="display:block;margin-top:2px">Package: '+f(pkg)+'</span>':'')
+        +'<span style="display:block;margin-top:2px">Tips: '+f(tips)+'</span></div>';
+    })
+    .catch(function(){el.textContent='Commission data not yet available.';});
+})();
+</script>
       </div>
       <div>
         <div class="sc-section-label">Service Breakdown</div>
