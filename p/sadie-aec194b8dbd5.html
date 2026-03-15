@@ -75,19 +75,6 @@ body { font-family: 'Lato', sans-serif; background: var(--g-vanilla); color: var
 </style>
 </head>
 <body>
-<script>
-(function() {
-  var pin = sessionStorage.getItem('giova_pin');
-  if (pin !== '2046') {
-    var entered = prompt('Enter PIN to view dashboard:');
-    if (entered !== '2046') {
-      document.body.innerHTML = '<h1>Access Denied</h1>';
-      return;
-    }
-    sessionStorage.setItem('giova_pin', entered);
-  }
-})();
-</script>
 <div class="dashboard">
   <div class="dash-header">
     <div class="logo-wrap"><img class="logo-img" src="https://influx-site-assets.s3.us-west-2.amazonaws.com/giovamedspa.com/logos/giova-name-tagline-logo.png" alt="GIOVA"></div>
