@@ -294,6 +294,23 @@ function loadState() {
 function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE)); }
 
 /* ============================================
+   DATE HELPERS — shared by XLSX parser & Google Sheets
+   ============================================ */
+function toISODate(d) {
+  if (!d || d === 'All') return null;
+  if (d instanceof Date && !isNaN(d)) return d.toISOString().slice(0, 10);
+  if (typeof d === 'string') { const m = d.match(/^(\d{4}-\d{2}-\d{2})/); if (m) return m[1]; }
+  if (typeof d === 'number' && d > 40000 && d < 60000) {
+    const dt = new Date((d - 25569) * 86400000);
+    if (!isNaN(dt)) return dt.toISOString().slice(0, 10);
+  }
+  return null;
+}
+function toMonthKey(d) { const s = toISODate(d); return s ? s.slice(0, 7) : null; }
+function toDateStr(d) { return toISODate(d); }
+function isAllRow(d) { return d === undefined || d === null || d === '' || String(d) === 'All'; }
+
+/* ============================================
    XLSX PARSER
    ============================================ */
 function parseXLSX(file) {
@@ -306,11 +323,11 @@ function parseXLSX(file) {
         const raw = XLSX.utils.sheet_to_json(wb.Sheets['Raw_Data services'] || wb.Sheets[wb.SheetNames[0]]);
         const prod = XLSX.utils.sheet_to_json(wb.Sheets['Raw_Product_Data'] || wb.Sheets[wb.SheetNames[1]]);
 
-        // Detect month from dates
+        // Detect month from dates (handles Date objects, strings, and Excel serial numbers)
         let monthKey = null, monthName = null, asOf = null, weekEnd = null;
         for(const r of raw) {
-          const d = r['SaleDate Date'];
-          if(d instanceof Date) { monthKey = d.toISOString().slice(0,7); break; }
+          monthKey = toMonthKey(r['SaleDate Date']);
+          if (monthKey) break;
         }
         if(!monthKey) { reject('Could not detect month from data'); return; }
         monthName = monthLabel(monthKey);
@@ -336,7 +353,7 @@ function parseXLSX(file) {
           // Categories from raw data
           const categories = {};
           for(const r of raw) {
-            if(r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && r['SaleDate Date'] === 'All') {
+            if(r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && isAllRow(r['SaleDate Date'])) {
               categories[r['Service category_name']] = {
                 revenue: Number(r['Service Sales'])||0,
                 appointments: Number(r['Appointment Count'])||0,
@@ -348,7 +365,7 @@ function parseXLSX(file) {
           // Top products
           const topProducts = [];
           for(const r of prod) {
-            if(r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && r['SaleDate Date'] === 'All') {
+            if(r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && isAllRow(r['SaleDate Date'])) {
               const amt = Number(r['Gross Retail Product Sales']);
               if(amt > 0) topProducts.push({name: r['Product name'], amount: amt});
             }
@@ -358,7 +375,7 @@ function parseXLSX(file) {
           // Appointments/hours from raw All row
           let appts = 0, hrs = 0;
           for(const r of raw) {
-            if(r['Staff Name'] === name && r['Service category_name'] === 'All' && r['SaleDate Date'] === 'All') {
+            if(r['Staff Name'] === name && r['Service category_name'] === 'All' && isAllRow(r['SaleDate Date'])) {
               appts = Number(r['Appointment Count'])||0;
               hrs = Number(r['Service Hours'])||0;
               break;
@@ -398,43 +415,58 @@ async function loadFromGoogleSheets() {
     const toJson = csv => { const wb = XLSX.read(csv, {type:'string'}); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]); };
     const toArr = csv => { const wb = XLSX.read(csv, {type:'string'}); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}); };
     const money = v => { if (typeof v === 'number') return v; if (!v) return 0; return Number(String(v).replace(/[$,]/g, '')) || 0; };
-    const raw = toJson(csvs[1]);
-    const prod = toJson(csvs[2]);
+    // Strip duplicate header rows (Bonnie pastes weekly exports which include headers)
+    function stripDuplicateHeaders(rows) {
+      return rows.filter(r => r['Staff Name'] !== 'Staff Name');
+    }
+    const raw = stripDuplicateHeaders(toJson(csvs[1]));
+    const prod = stripDuplicateHeaders(toJson(csvs[2]));
     const wpRows = toArr(csvs[0]);
 
     // Detect ALL unique months from date rows
     const monthSet = new Set();
     for (const r of raw) {
-      const d = r['SaleDate Date'];
-      if (d && d !== 'All' && typeof d === 'string') {
-        const m = d.match(/^(\d{4})-(\d{2})/);
-        if (m) monthSet.add(m[1] + '-' + m[2]);
-      }
+      const mk = toMonthKey(r['SaleDate Date']);
+      if (mk) monthSet.add(mk);
     }
     if (monthSet.size === 0) return;
     const allMonths = Array.from(monthSet).sort();
 
-    // Tag every row with its month — handles "All" rows via Month_Key or positional tracking
+    // Two-pass month tagging: first build a map of row index → month from dated rows,
+    // then assign "All" rows to the nearest FOLLOWING month (not just previous)
     function tagRows(rows) {
-      let lastMonth = null;
-      return rows.map(r => {
+      // Pass 1: tag rows that have explicit dates or Month_Key
+      const tagged = rows.map(r => {
         const d = r['SaleDate Date'];
         const mk = r['Month_Key'];
-        // Try Month_Key column first (may be YYYY-MM or "Month YYYY")
-        if (mk && typeof mk === 'string') {
-          const m = mk.match(/(\d{4})-(\d{2})/);
-          if (m) { lastMonth = m[1] + '-' + m[2]; return { ...r, _month: lastMonth }; }
-          const dt = new Date(mk + ' 1');
-          if (!isNaN(dt)) { lastMonth = dt.toISOString().slice(0,7); return { ...r, _month: lastMonth }; }
+        let month = null;
+        if (mk) {
+          const mkStr = String(mk);
+          const m = mkStr.match(/(\d{4})-(\d{2})/);
+          if (m) month = m[1] + '-' + m[2];
+          else { const dt = new Date(mkStr + ' 1'); if (!isNaN(dt)) month = dt.toISOString().slice(0,7); }
         }
-        // Fall back to SaleDate Date for date rows
-        if (d && d !== 'All' && typeof d === 'string') {
-          const m = d.match(/^(\d{4})-(\d{2})/);
-          if (m) lastMonth = m[1] + '-' + m[2];
-        }
-        // "All" rows inherit the last-seen month (positional)
-        return { ...r, _month: lastMonth };
+        if (!month) month = toMonthKey(d);
+        return { ...r, _month: month };
       });
+
+      // Pass 2: fill in nulls — look forward first, then backward
+      for (let i = 0; i < tagged.length; i++) {
+        if (tagged[i]._month) continue;
+        // Look forward for the next dated row's month
+        let found = null;
+        for (let j = i + 1; j < tagged.length && j < i + 50; j++) {
+          if (tagged[j]._month) { found = tagged[j]._month; break; }
+        }
+        // Fall back to looking backward
+        if (!found) {
+          for (let j = i - 1; j >= 0 && j > i - 50; j--) {
+            if (tagged[j]._month) { found = tagged[j]._month; break; }
+          }
+        }
+        tagged[i]._month = found;
+      }
+      return tagged;
     }
     const taggedRaw = tagRows(raw);
     const taggedProd = tagRows(prod);
@@ -472,8 +504,9 @@ async function loadFromGoogleSheets() {
       let monthAsOf = null;
       for (const r of monthRaw) {
         const d = r['SaleDate Date'];
-        if (d && d !== 'All' && typeof d === 'string' && d.startsWith(monthKey)) {
-          if (!monthAsOf || d > monthAsOf) monthAsOf = d.slice(0,10);
+        const dStr = toDateStr(d);
+        if (dStr && dStr.startsWith(monthKey)) {
+          if (!monthAsOf || dStr > monthAsOf) monthAsOf = dStr;
         }
       }
       if (!monthAsOf) { const [y, m] = monthKey.split('-'); monthAsOf = new Date(Number(y), Number(m), 0).toISOString().slice(0, 10); }
@@ -485,7 +518,7 @@ async function loadFromGoogleSheets() {
         // Categories from this month's "All" rows
         const categories = {};
         for (const r of monthRaw) {
-          if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && String(r['SaleDate Date']) === 'All') {
+          if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && isAllRow(r['SaleDate Date'])) {
             categories[r['Service category_name']] = { revenue: money(r['Service Sales']), appointments: Number(r['Appointment Count']) || 0, hours: Number(r['Service Hours']) || 0 };
           }
         }
@@ -493,7 +526,7 @@ async function loadFromGoogleSheets() {
         // If no "All" rows found for this month, aggregate from individual date rows
         if (Object.keys(categories).length === 0) {
           for (const r of monthRaw) {
-            if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && String(r['SaleDate Date']) !== 'All') {
+            if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && !isAllRow(r['SaleDate Date'])) {
               const cat = r['Service category_name'];
               if (!categories[cat]) categories[cat] = { revenue: 0, appointments: 0, hours: 0 };
               categories[cat].revenue += money(r['Service Sales']);
@@ -506,7 +539,7 @@ async function loadFromGoogleSheets() {
         // Top products from this month's "All" rows
         const topProducts = [];
         for (const r of monthProd) {
-          if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && String(r['SaleDate Date']) === 'All') {
+          if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && isAllRow(r['SaleDate Date'])) {
             const amt = money(r['Gross Retail Product Sales']);
             if (amt > 0) topProducts.push({ name: r['Product name'], amount: amt });
           }
@@ -515,7 +548,7 @@ async function loadFromGoogleSheets() {
         if (topProducts.length === 0) {
           const prodMap = {};
           for (const r of monthProd) {
-            if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && String(r['SaleDate Date']) !== 'All') {
+            if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && !isAllRow(r['SaleDate Date'])) {
               const pn = r['Product name'];
               if (!prodMap[pn]) prodMap[pn] = 0;
               prodMap[pn] += money(r['Gross Retail Product Sales']);
@@ -530,14 +563,14 @@ async function loadFromGoogleSheets() {
         // Appointments & hours
         let appts = 0, hrs = 0;
         for (const r of monthRaw) {
-          if (r['Staff Name'] === name && r['Service category_name'] === 'All' && String(r['SaleDate Date']) === 'All') {
+          if (r['Staff Name'] === name && r['Service category_name'] === 'All' && isAllRow(r['SaleDate Date'])) {
             appts = Number(r['Appointment Count']) || 0; hrs = Number(r['Service Hours']) || 0; break;
           }
         }
         // Fallback: sum from individual rows
         if (appts === 0 && hrs === 0) {
           for (const r of monthRaw) {
-            if (r['Staff Name'] === name && String(r['SaleDate Date']) !== 'All' && r['Service category_name'] !== 'All') {
+            if (r['Staff Name'] === name && !isAllRow(r['SaleDate Date']) && r['Service category_name'] !== 'All') {
               appts += Number(r['Appointment Count']) || 0; hrs += Number(r['Service Hours']) || 0;
             }
           }
@@ -553,7 +586,7 @@ async function loadFromGoogleSheets() {
           const svcTotal = Object.values(categories).reduce((s, c) => s + c.revenue, 0);
           let prodTotal = 0;
           for (const r of monthProd) {
-            if (r['Staff Name'] === name && r['Product name'] === 'All' && String(r['SaleDate Date']) === 'All') {
+            if (r['Staff Name'] === name && r['Product name'] === 'All' && isAllRow(r['SaleDate Date'])) {
               prodTotal = money(r['Gross Retail Product Sales']); break;
             }
           }
