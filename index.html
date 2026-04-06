@@ -284,9 +284,10 @@ function monthLabel(key) { const [y,m] = key.split('-'); return new Date(y,m-1).
 /* ============================================
    STORAGE
    ============================================ */
+let SYNC_STATUS = { state: 'pending', lastSync: null, error: null };
 function loadState() {
   try { const s = JSON.parse(localStorage.getItem(STORAGE_KEY)); if(s && s.months) STATE = s; } catch(e) {}
-  if(!STATE.months['2026-02']) STATE.months['2026-02'] = SEED;
+  if(Object.keys(STATE.months).length === 0) STATE.months['2026-02'] = SEED;
   const keys = Object.keys(STATE.months).sort();
   if(!STATE.currentMonth || !STATE.months[STATE.currentMonth]) STATE.currentMonth = keys[keys.length-1];
   if(!STATE.period) STATE.period = 'month';
@@ -299,7 +300,11 @@ function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(STATE));
 function toISODate(d) {
   if (!d || d === 'All') return null;
   if (d instanceof Date && !isNaN(d)) return d.toISOString().slice(0, 10);
-  if (typeof d === 'string') { const m = d.match(/^(\d{4}-\d{2}-\d{2})/); if (m) return m[1]; }
+  if (typeof d === 'string') {
+    const m = d.match(/^(\d{4}-\d{2}-\d{2})/); if (m) return m[1];
+    const mdy = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (mdy) return mdy[3] + '-' + mdy[1].padStart(2,'0') + '-' + mdy[2].padStart(2,'0');
+  }
   if (typeof d === 'number' && d > 40000 && d < 60000) {
     const dt = new Date((d - 25569) * 86400000);
     if (!isNaN(dt)) return dt.toISOString().slice(0, 10);
@@ -425,11 +430,19 @@ async function loadFromGoogleSheets() {
 
     // Detect ALL unique months from date rows
     const monthSet = new Set();
+    let sampleDates = [];
     for (const r of raw) {
       const mk = toMonthKey(r['SaleDate Date']);
       if (mk) monthSet.add(mk);
+      else if (r['SaleDate Date'] && sampleDates.length < 3) sampleDates.push(String(r['SaleDate Date']));
     }
-    if (monthSet.size === 0) return;
+    if (sampleDates.length > 0) console.warn('[Dashboard] Unparseable SaleDate Date samples:', sampleDates);
+    if (monthSet.size === 0) {
+      console.error('[Dashboard] No months detected from SaleDate Date column. Check column name and date formats.');
+      SYNC_STATUS = { state: 'error', lastSync: new Date().toISOString(), error: 'No months found in Sheet data — check SaleDate Date column' };
+      route();
+      return;
+    }
     const allMonths = Array.from(monthSet).sort();
 
     // Two-pass month tagging: first build a map of row index → month from dated rows,
@@ -490,7 +503,12 @@ async function loadFromGoogleSheets() {
       teamGoal += goal;
       wpProviders.push({ name, goal, twS: money(row[3]), twP: money(row[4]), mtdS: money(row[6]), mtdP: money(row[7]) });
     }
-    if (!wpProviders.length) return;
+    if (!wpProviders.length) {
+      console.error('[Dashboard] No providers found in Weekly_Pacing tab.');
+      SYNC_STATUS = { state: 'error', lastSync: new Date().toISOString(), error: 'No providers found in Weekly_Pacing tab' };
+      route();
+      return;
+    }
 
     const latestMonth = allMonths[allMonths.length - 1];
 
@@ -605,10 +623,13 @@ async function loadFromGoogleSheets() {
     }
 
     STATE.currentMonth = latestMonth;
+    SYNC_STATUS = { state: 'ok', lastSync: new Date().toISOString(), error: null, months: allMonths.length };
     saveState();
     route();
   } catch (e) {
-    console.warn('Google Sheets live fetch failed, using cached data:', e);
+    console.error('[Dashboard] Google Sheets fetch failed:', e);
+    SYNC_STATUS = { state: 'error', lastSync: new Date().toISOString(), error: String(e.message || e).slice(0, 200) };
+    route();
   }
 }
 
@@ -851,7 +872,15 @@ function renderHeader(data) {
     <select class="month-select" onchange="setMonth(this.value)">
       ${keys.map(k => `<option value="${k}" ${k===STATE.currentMonth?'selected':''}>${monthLabel(k)}</option>`).join('')}
     </select>
-  </div>`;
+    <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+      <span style="font-family:'Roboto Condensed',sans-serif;font-size:9px;letter-spacing:1px;color:${SYNC_STATUS.state==='ok'?'var(--g-green)':SYNC_STATUS.state==='error'?'var(--g-red)':'var(--g-pigeon)'};">
+        ${SYNC_STATUS.state==='ok' ? 'SYNCED' : SYNC_STATUS.state==='error' ? 'SYNC FAILED' : 'SYNCING...'}
+        ${SYNC_STATUS.lastSync ? ' &bull; '+new Date(SYNC_STATUS.lastSync).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : ''}
+      </span>
+      <button onclick="SYNC_STATUS={state:'pending',lastSync:null,error:null};route();loadFromGoogleSheets();" style="padding:4px 10px;font-family:'Roboto Condensed',sans-serif;font-size:9px;letter-spacing:1px;border:1px solid var(--g-med-beige);border-radius:3px;background:#fff;cursor:pointer;">REFRESH</button>
+    </div>
+  </div>
+  ${SYNC_STATUS.state==='error' ? '<div style="background:#fff3f3;border:1px solid #e8c4c4;border-radius:4px;padding:8px 14px;margin:10px 0;font-family:Roboto Condensed,sans-serif;font-size:11px;color:#8b3030;">Data sync failed: '+SYNC_STATUS.error+'</div>' : ''}`;
 }
 
 /* ============================================
@@ -897,7 +926,11 @@ function closeUpload() { document.getElementById('uploadOverlay').classList.remo
    ============================================ */
 function renderExecutive() {
   const data = getViewData();
-  if(!data) { document.getElementById('app').innerHTML = '<p>No data available.</p>'; return; }
+  if(!data) {
+    const syncMsg = SYNC_STATUS.state==='error' ? '<div style="background:#fff3f3;border:1px solid #e8c4c4;border-radius:4px;padding:12px 18px;margin:20px 0;font-family:Roboto Condensed,sans-serif;font-size:12px;color:#8b3030;">Data sync failed: '+(SYNC_STATUS.error||'unknown error')+'</div>' : '';
+    document.getElementById('app').innerHTML = '<div class="dash-header"><div class="logo-wrap"><img class="logo-img" src="'+LOGO_URL+'" alt="GIOVA"></div><div class="header-center"><h1>Dashboard</h1><div class="meta">No data loaded</div></div></div>' + syncMsg + '<div style="text-align:center;padding:40px;font-family:Roboto Condensed,sans-serif;"><p style="color:var(--g-pigeon);font-size:13px;">No month data available.</p><button onclick="SYNC_STATUS={state:\'pending\',lastSync:null,error:null};route();loadFromGoogleSheets();" style="padding:8px 20px;font-family:Roboto Condensed,sans-serif;font-size:11px;letter-spacing:1px;border:1px solid var(--g-med-beige);border-radius:3px;background:#fff;cursor:pointer;margin-top:12px;">REFRESH FROM GOOGLE SHEETS</button></div>';
+    return;
+  }
   const app = document.getElementById('app');
   const teamTotal = data.providers.reduce((s,p)=>s+p.mtd.service+p.mtd.product,0);
   const teamSvc = data.providers.reduce((s,p)=>s+p.mtd.service,0);
