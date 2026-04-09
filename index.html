@@ -227,9 +227,19 @@ const LIVE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const SHEET_ID = '1sNhLPPN68FUp4XwsOIweUN_Uz68beljvAxGNBkqFvwg';
 const PROVIDER_ROLES = {'Dr Silkey':'Medical Director','Summer Faulkner':'Injector','Riley Packer':'Aesthetician','Brooklyn Jensen':'Aesthetician','Sadie Zeidler':'Aesthetician'};
 
-/* Commission workbook — populated by setup-commission-workbook.js */
-const COMMISSION_SHEET_ID = '188Fhz1Skn1oO4xM7fszoAI0TJw5XksocwsrQJmFXbxg';
-let COMMISSION_DATA = null; // { providers: { 'Summer Faulkner': { service, product, package, tips, grand, type }, ... }, grandTotal }
+/* Commission workbooks — one per pay period, newest first */
+const COMMISSION_WORKBOOKS = [
+  { id: '188Fhz1Skn1oO4xM7fszoAI0TJw5XksocwsrQJmFXbxg', label: '03/15 - 03/28', start: '2026-03-15', end: '2026-03-28' },
+  { id: '1i5SwOCCBs9bIb553kOcgsDV3qKN6QV3OJ8WvD4k58D0', label: '03/01 - 03/14', start: '2026-03-01', end: '2026-03-14' }
+];
+let COMMISSION_SHEET_ID = COMMISSION_WORKBOOKS[0].id;
+let COMMISSION_DATA = null;
+
+function switchPayPeriod(sheetId) {
+  COMMISSION_SHEET_ID = sheetId;
+  COMMISSION_DATA = null;
+  loadCommissionData().then(function() { route(); });
+}
 const COMMISSION_PROVIDER_MAP = {
   'Summer Faulkner': { tab: 'Report_Summer', type: 'commission' },
   'Dr Silkey': { tab: 'Report_DrSilkey', type: 'salary' },
@@ -749,7 +759,9 @@ function renderCommissionSummary() {
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
       '<div class="section-label" style="margin-bottom:0;padding-bottom:0;border-bottom:none">Commission Summary</div>' +
       '<div style="display:flex;align-items:center;gap:12px">' +
-        '<span style="font-family:Roboto Condensed,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--g-pigeon)">' + (COMMISSION_DATA.dateRange || 'Current Pay Period') + '</span>' +
+        '<select onchange="switchPayPeriod(this.value)" style="font-family:Roboto Condensed,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:var(--g-charcoal);border:1px solid var(--g-med-beige);border-radius:3px;padding:4px 8px;background:#fff;cursor:pointer">' +
+        COMMISSION_WORKBOOKS.map(function(wb) { return '<option value="' + wb.id + '"' + (wb.id === COMMISSION_SHEET_ID ? ' selected' : '') + '>' + wb.label + '</option>'; }).join('') +
+        '</select>' +
         '<a href="https://docs.google.com/spreadsheets/d/' + COMMISSION_SHEET_ID + '/edit" target="_blank" class="dl-btn" style="padding:6px 14px;font-size:10px;letter-spacing:2px;text-decoration:none;display:inline-flex;align-items:center;gap:5px">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>' +
           'View Workbook</a>' +
