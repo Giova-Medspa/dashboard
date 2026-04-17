@@ -229,22 +229,11 @@ const PROVIDER_ROLES = {'Dr Silkey':'Medical Director','Summer Faulkner':'Inject
 
 /* Commission workbooks — one per pay period, newest first */
 const COMMISSION_WORKBOOKS = [
-  { id: '1zYvlOznuDlsGAJbHMIj6FuQtlLXh1liQPQHyBSg55Kk', label: '03/29 - 04/11', start: '2026-03-29', end: '2026-04-11' },
   { id: '188Fhz1Skn1oO4xM7fszoAI0TJw5XksocwsrQJmFXbxg', label: '03/15 - 03/28', start: '2026-03-15', end: '2026-03-28' },
   { id: '1i5SwOCCBs9bIb553kOcgsDV3qKN6QV3OJ8WvD4k58D0', label: '03/01 - 03/14', start: '2026-03-01', end: '2026-03-14' }
 ];
 let COMMISSION_SHEET_ID = COMMISSION_WORKBOOKS[0].id;
 let COMMISSION_DATA = null;
-
-/* Revenue unification: March 2026+ uses commission workbooks as revenue source */
-const COMMISSION_REVENUE_CUTOVER = '2026-03';
-const COMMISSION_NAME_MAP = {
-  'Faulkner, Summer': 'Summer Faulkner',
-  'Silkey, Dr': 'Dr Silkey',
-  'Packer, Riley': 'Riley Packer',
-  'Jensen, Brooklyn': 'Brooklyn Jensen',
-  'Zeidler, Sadie': 'Sadie Zeidler'
-};
 
 function switchPayPeriod(sheetId) {
   COMMISSION_SHEET_ID = sheetId;
@@ -644,15 +633,7 @@ async function loadFromGoogleSheets() {
     }
 
     STATE.currentMonth = latestMonth;
-
-    // Revenue unification: augment with commission workbook data for March+
-    try {
-      await augmentWithCommissionRevenue(wpProviders, teamGoal);
-    } catch (e) {
-      console.warn('[Revenue Unification] augment failed (non-fatal):', e.message);
-    }
-
-    SYNC_STATUS = { state: 'ok', lastSync: new Date().toISOString(), error: null, months: Object.keys(STATE.months).length };
+    SYNC_STATUS = { state: 'ok', lastSync: new Date().toISOString(), error: null, months: allMonths.length };
     saveState();
     route();
   } catch (e) {
@@ -685,7 +666,6 @@ function aggregateMonths(keys) {
       mtd: { service: pMonths.reduce((s,p) => s + p.mtd.service, 0), product: pMonths.reduce((s,p) => s + p.mtd.product, 0) },
       appointments: pMonths.reduce((s,p) => s + p.appointments, 0),
       hours: pMonths.reduce((s,p) => s + p.hours, 0),
-      membershipRevenue: pMonths.reduce((s,p) => s + (p.membershipRevenue||0), 0),
       categories: {}, topProducts: []
     };
 
@@ -812,184 +792,6 @@ function renderProviderCommission(providerName) {
     '</div>';
 }
 
-/* ============================================
-   REVENUE FROM COMMISSION WORKBOOKS (March 2026+)
-   Eliminates separate BLVD revenue report pull for Bonnie.
-   Commission workbooks Amount col = BLVD Subtotal.
-   Membership services excluded from revenue goals.
-   Jan/Feb stays old format. March+ from commission workbooks.
-   ============================================ */
-async function augmentWithCommissionRevenue(wpProviders, teamGoal) {
-  if (!wpProviders || !wpProviders.length) return;
-
-  const money = v => { if (typeof v === 'number') return v; if (!v) return 0; return Number(String(v).replace(/[$,]/g, '')) || 0; };
-
-  // Collect revenue per month per provider from all commission workbooks
-  const monthRevenue = {}; // { '2026-03': { 'Summer Faulkner': { service, product, pkg, tips, hours, membershipRevenue } } }
-
-  for (const wb of COMMISSION_WORKBOOKS) {
-    if (!wb.start || !wb.end) continue;
-
-    // Count days per month for proportional split on cross-month workbooks
-    const startD = new Date(wb.start + 'T00:00:00');
-    const endD = new Date(wb.end + 'T00:00:00');
-    const daysByMonth = {};
-    for (let d = new Date(startD); d <= endD; d.setDate(d.getDate() + 1)) {
-      const mk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-      daysByMonth[mk] = (daysByMonth[mk] || 0) + 1;
-    }
-    const totalDays = Object.values(daysByMonth).reduce((s, n) => s + n, 0);
-
-    try {
-      const BASE = `https://docs.google.com/spreadsheets/d/${wb.id}/gviz/tq?tqx=out:csv`;
-
-      // Fetch Commission_Summary + Time_Clock in parallel
-      const [csResp, tcResp] = await Promise.all([
-        fetch(`${BASE}&sheet=${encodeURIComponent('Commission_Summary')}`),
-        fetch(`${BASE}&sheet=${encodeURIComponent('Time_Clock')}`).catch(() => null)
-      ]);
-
-      if (!csResp.ok) continue;
-      const csCSV = await csResp.text();
-      const csParsed = XLSX.read(csCSV, { type: 'string' });
-      const csRows = XLSX.utils.sheet_to_json(csParsed.Sheets[csParsed.SheetNames[0]]);
-
-      // Parse hours from Time_Clock
-      const hoursMap = {};
-      if (tcResp && tcResp.ok) {
-        try {
-          const tcCSV = await tcResp.text();
-          const tcParsed = XLSX.read(tcCSV, { type: 'string' });
-          const tcRows = XLSX.utils.sheet_to_json(tcParsed.Sheets[tcParsed.SheetNames[0]]);
-          for (const r of tcRows) {
-            const rawName = String(r['Provider'] || '').trim();
-            const name = COMMISSION_NAME_MAP[rawName] || rawName;
-            hoursMap[name] = (hoursMap[name] || 0) + (parseFloat(r['Hours']) || 0);
-          }
-        } catch (e) { /* Time_Clock non-fatal */ }
-      }
-
-      // Also try to read detail tabs to identify membership revenue
-      const membershipMap = {}; // { providerName: membershipAmount }
-      const detailTabs = {
-        'Summer Faulkner': 'Report_Summer',
-        'Dr Silkey': 'Report_DrSilkey',
-        'Riley Packer': 'Report_Riley',
-        'Brooklyn Jensen': 'Report_Brooklyn',
-        'Sadie Zeidler': 'Report_Sadie'
-      };
-      try {
-        const detailFetches = Object.entries(detailTabs).map(async ([prov, tab]) => {
-          try {
-            const resp = await fetch(`${BASE}&sheet=${encodeURIComponent(tab)}`);
-            if (!resp.ok) return;
-            const csv = await resp.text();
-            const parsed = XLSX.read(csv, { type: 'string' });
-            const rows = XLSX.utils.sheet_to_json(parsed.Sheets[parsed.SheetNames[0]]);
-            let memTotal = 0;
-            for (const r of rows) {
-              const item = String(r['Item'] || '');
-              if (/membership/i.test(item) || /^MBB\s/i.test(item)) {
-                memTotal += money(r['Amount']);
-              }
-            }
-            if (memTotal > 0) membershipMap[prov] = memTotal;
-          } catch (e) { /* non-fatal */ }
-        });
-        await Promise.all(detailFetches);
-      } catch (e) { /* non-fatal */ }
-
-      // Distribute Commission_Summary data across months proportionally
-      for (const r of csRows) {
-        const rawName = String(r['Provider'] || '').trim();
-        if (!rawName) continue;
-        const provName = COMMISSION_NAME_MAP[rawName] || rawName;
-
-        const svc = money(r['Service']);
-        const prod = money(r['Product']);
-        const pkg = money(r['Package']);
-        const tips = money(r['Tips']);
-        const hrs = hoursMap[provName] || 0;
-        const memRev = membershipMap[provName] || 0;
-
-        for (const [mk, days] of Object.entries(daysByMonth)) {
-          if (mk < COMMISSION_REVENUE_CUTOVER) continue; // Only March+
-          const ratio = days / totalDays;
-          if (!monthRevenue[mk]) monthRevenue[mk] = {};
-          if (!monthRevenue[mk].__wbEnds) monthRevenue[mk].__wbEnds = {};
-          monthRevenue[mk].__wbEnds[wb.end] = true;
-          if (!monthRevenue[mk][provName]) monthRevenue[mk][provName] = { service: 0, product: 0, pkg: 0, tips: 0, hours: 0, membershipRevenue: 0 };
-          monthRevenue[mk][provName].service += svc * ratio;
-          monthRevenue[mk][provName].product += prod * ratio;
-          monthRevenue[mk][provName].pkg += pkg * ratio;
-          monthRevenue[mk][provName].tips += tips * ratio;
-          monthRevenue[mk][provName].hours += hrs * ratio;
-          monthRevenue[mk][provName].membershipRevenue += memRev * ratio;
-        }
-      }
-    } catch (e) {
-      console.warn('[Revenue Unification] Failed to load workbook', wb.label, e.message);
-    }
-  }
-
-  // Build/override STATE.months entries for commission-sourced months
-  for (const [monthKey, provData] of Object.entries(monthRevenue)) {
-    const providers = [];
-    for (const wp of wpProviders) {
-      const cd = provData[wp.name] || { service: 0, product: 0, pkg: 0, tips: 0, hours: 0, membershipRevenue: 0 };
-      const svc = Math.round(cd.service * 100) / 100;
-      const prod = Math.round(cd.product * 100) / 100;
-      const memRev = Math.round(cd.membershipRevenue * 100) / 100;
-
-      // Check if BLVD data already exists for this month/provider — merge categories if available
-      const existingMonth = STATE.months[monthKey];
-      const existingProv = existingMonth ? existingMonth.providers.find(p => p.name === wp.name) : null;
-
-      providers.push({
-        name: wp.name,
-        role: PROVIDER_ROLES[wp.name] || 'Provider',
-        goal: wp.goal,
-        thisWeek: { service: 0, product: 0 },
-        mtd: { service: svc, product: prod },
-        appointments: existingProv ? existingProv.appointments : 0,
-        hours: Math.round(cd.hours * 10) / 10,
-        categories: existingProv ? existingProv.categories : {},
-        topProducts: existingProv ? existingProv.topProducts : [],
-        membershipRevenue: memRev
-      });
-    }
-
-    const [y, m] = monthKey.split('-');
-    const mn = new Date(Number(y), Number(m) - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
-    const lastDay = new Date(Number(y), Number(m), 0).toISOString().slice(0, 10);
-    // Use the latest workbook end date that contributed to this month, capped at today
-    const today = new Date().toISOString().slice(0, 10);
-    const maxWbEnd = Object.keys(monthRevenue[monthKey].__wbEnds || {}).sort().pop() || lastDay;
-    const asOfDate = maxWbEnd < lastDay ? (maxWbEnd < today ? maxWbEnd : today) : (lastDay < today ? lastDay : today);
-
-    STATE.months[monthKey] = {
-      month: mn,
-      key: monthKey,
-      asOf: asOfDate,
-      weekEnding: asOfDate,
-      teamGoal: teamGoal,
-      providers: providers,
-      source: 'commission-workbooks'
-    };
-
-    // Update currentMonth if this is newer
-    if (!STATE.currentMonth || monthKey > STATE.currentMonth) {
-      STATE.currentMonth = monthKey;
-    }
-  }
-
-  // Update sync status with commission months
-  const commMonths = Object.keys(monthRevenue).filter(k => k >= COMMISSION_REVENUE_CUTOVER);
-  if (commMonths.length > 0) {
-    SYNC_STATUS.commissionMonths = commMonths.length;
-  }
-}
-
 function getViewData() {
   const keys = Object.keys(STATE.months).sort();
   if(STATE.period === 'month') return STATE.months[STATE.currentMonth];
@@ -1011,12 +813,9 @@ function getViewData() {
    ============================================ */
 function renderScorecard(p, showWeekly) {
   const total = p.mtd.service + p.mtd.product;
-  // Exclude membership revenue from goal progress (membership not part of revenue goals)
-  const memRev = p.membershipRevenue || 0;
-  const goalTotal = total - memRev;
-  const ratio = goalTotal / p.goal;
+  const ratio = total / p.goal;
   const st = getStatus(ratio);
-  const remaining = p.goal - goalTotal;
+  const remaining = p.goal - total;
   const thisWeekTotal = p.thisWeek.service + p.thisWeek.product;
   const cats = Object.entries(p.categories||{}).sort((a,b) => b[1].revenue - a[1].revenue);
   const maxCatRev = cats.length > 0 ? cats[0][1].revenue : 1;
@@ -1148,9 +947,7 @@ function renderExecutive() {
   const teamTotal = data.providers.reduce((s,p)=>s+p.mtd.service+p.mtd.product,0);
   const teamSvc = data.providers.reduce((s,p)=>s+p.mtd.service,0);
   const teamProd = data.providers.reduce((s,p)=>s+p.mtd.product,0);
-  const teamMemRev = data.providers.reduce((s,p)=>s+(p.membershipRevenue||0),0);
-  const teamGoalTotal = teamTotal - teamMemRev;
-  const teamPct = teamGoalTotal / data.teamGoal;
+  const teamPct = teamTotal / data.teamGoal;
   const teamSt = getStatus(teamPct);
   const ranked = [...data.providers].sort((a,b)=>(b.mtd.service+b.mtd.product)-(a.mtd.service+a.mtd.product));
   const showWeekly = STATE.period === 'month';
@@ -1170,9 +967,9 @@ function renderExecutive() {
       </select>
       <button class="dl-btn" onclick="downloadSelected()">${DL_ICON} Download</button>
     </div>
-    <div class="section-label">Executive Snapshot${data.source==='commission-workbooks'?' <span style="font-size:10px;color:var(--g-brown);font-weight:400;margin-left:8px">Source: Commission Workbooks</span>':''}</div>
+    <div class="section-label">Executive Snapshot</div>
     <div class="exec-grid">
-      <div class="exec-card"><div class="label">Team Revenue</div><div class="value">${fmt(teamTotal)}</div><div class="sub">${teamMemRev>0?fmt(teamGoalTotal)+' toward goal (excl. membership)':'of '+fmt(data.teamGoal)+' goal'}</div></div>
+      <div class="exec-card"><div class="label">Team Revenue</div><div class="value">${fmt(teamTotal)}</div><div class="sub">of ${fmt(data.teamGoal)} goal</div></div>
       <div class="exec-card"><div class="label">% to Goal</div><div class="value ${teamPct>=1?'goal-hit':''}">${pct(teamPct)}</div><div class="sub"><span class="status-badge ${teamSt.cls}">${teamSt.text}</span></div></div>
       <div class="exec-card"><div class="label">Service Revenue</div><div class="value">${fmt(teamSvc)}</div><div class="sub">${pct(teamSvc/teamTotal)} of total</div></div>
       <div class="exec-card"><div class="label">Product Revenue</div><div class="value">${fmt(teamProd)}</div><div class="sub">${pct(teamProd/teamTotal)} of total</div></div>
@@ -1181,7 +978,7 @@ function renderExecutive() {
       <div class="section-label" style="margin-bottom:8px">Revenue Mix</div>
       <div class="mix-row"><div class="mix-bar" style="width:${teamSvc/teamTotal*100}%;background:var(--g-brown)">Service ${fmt(teamSvc)}</div><div class="mix-bar" style="width:${teamProd/teamTotal*100}%;background:var(--g-teal)">Product ${fmt(teamProd)}</div></div>
       <div class="progress-track" style="margin-top:20px"><div class="progress-fill" style="width:${Math.min(teamPct*100,100)}%;background:${teamSt.color}"></div></div>
-      <div class="progress-labels"><span>${fmt(teamGoalTotal)} toward goal</span><span>${fmt(Math.max(data.teamGoal-teamGoalTotal,0))} remaining</span><span>${fmt(data.teamGoal)} goal</span></div>
+      <div class="progress-labels"><span>${fmt(teamTotal)} earned</span><span>${fmt(Math.max(data.teamGoal-teamTotal,0))} remaining</span><span>${fmt(data.teamGoal)} goal</span></div>
     </div>
     <div class="section-label">Provider Rankings</div>
     <div class="rankings">
