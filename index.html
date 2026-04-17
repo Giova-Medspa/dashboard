@@ -563,76 +563,44 @@ async function loadOneRevenueSheet(sheetId) {
       for (const wp of wpProviders) {
         const name = wp.name;
 
-        // Categories from this month's "All" rows
+        // Categories: sum all individual date rows for this provider
         const categories = {};
         for (const r of monthRaw) {
-          if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && isAllRow(getDate(r))) {
-            categories[r['Service category_name']] = { revenue: money(r['Service Sales']), appointments: Number(r['Appointment Count']) || 0, hours: Number(r['Service Hours']) || 0 };
+          if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && !isAllRow(getDate(r))) {
+            const cat = r['Service category_name'];
+            if (!categories[cat]) categories[cat] = { revenue: 0, appointments: 0, hours: 0 };
+            categories[cat].revenue += money(r['Service Sales']);
+            categories[cat].appointments += Number(r['Appointment Count']) || 0;
+            categories[cat].hours += Number(r['Service Hours']) || 0;
           }
         }
 
-        // If no "All" rows found for this month, aggregate from individual date rows
-        if (Object.keys(categories).length === 0) {
-          for (const r of monthRaw) {
-            if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && !isAllRow(getDate(r))) {
-              const cat = r['Service category_name'];
-              if (!categories[cat]) categories[cat] = { revenue: 0, appointments: 0, hours: 0 };
-              categories[cat].revenue += money(r['Service Sales']);
-              categories[cat].appointments += Number(r['Appointment Count']) || 0;
-              categories[cat].hours += Number(r['Service Hours']) || 0;
-            }
-          }
-        }
-
-        // Top products from this month's "All" rows
-        const topProducts = [];
+        // Top products: sum all individual date rows for this provider
+        const prodMap = {};
         for (const r of monthProd) {
-          if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && isAllRow(getDate(r))) {
-            const amt = money(r['Gross Retail Product Sales']);
-            if (amt > 0) topProducts.push({ name: r['Product name'], amount: amt });
+          if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && !isAllRow(getDate(r))) {
+            const pn = r['Product name'];
+            if (!prodMap[pn]) prodMap[pn] = 0;
+            prodMap[pn] += money(r['Gross Retail Product Sales']);
           }
         }
-        // Fallback: aggregate from individual product rows
-        if (topProducts.length === 0) {
-          const prodMap = {};
-          for (const r of monthProd) {
-            if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && !isAllRow(getDate(r))) {
-              const pn = r['Product name'];
-              if (!prodMap[pn]) prodMap[pn] = 0;
-              prodMap[pn] += money(r['Gross Retail Product Sales']);
-            }
-          }
-          for (const [pn, amt] of Object.entries(prodMap)) {
-            if (amt > 0) topProducts.push({ name: pn, amount: amt });
-          }
+        const topProducts = [];
+        for (const [pn, amt] of Object.entries(prodMap)) {
+          if (amt > 0) topProducts.push({ name: pn, amount: amt });
         }
         topProducts.sort((a, b) => b.amount - a.amount);
 
-        // Appointments & hours
+        // Appointments & hours: sum from individual date rows
         let appts = 0, hrs = 0;
         for (const r of monthRaw) {
-          if (r['Staff Name'] === name && r['Service category_name'] === 'All' && isAllRow(getDate(r))) {
-            appts = Number(r['Appointment Count']) || 0; hrs = Number(r['Service Hours']) || 0; break;
-          }
-        }
-        // Fallback: sum from individual rows
-        if (appts === 0 && hrs === 0) {
-          for (const r of monthRaw) {
-            if (r['Staff Name'] === name && !isAllRow(getDate(r)) && r['Service category_name'] !== 'All') {
-              appts += Number(r['Appointment Count']) || 0; hrs += Number(r['Service Hours']) || 0;
-            }
+          if (r['Staff Name'] === name && !isAllRow(getDate(r)) && r['Service category_name'] !== 'All') {
+            appts += Number(r['Appointment Count']) || 0; hrs += Number(r['Service Hours']) || 0;
           }
         }
 
         // MTD from Raw_Data categories + products (always calculated, not from Weekly_Pacing)
         const svcTotal = Object.values(categories).reduce((s, c) => s + c.revenue, 0);
-        let prodTotal = 0;
-        for (const r of monthProd) {
-          if (r['Staff Name'] === name && r['Product name'] === 'All' && isAllRow(getDate(r))) {
-            prodTotal = money(r['Gross Retail Product Sales']); break;
-          }
-        }
-        if (prodTotal === 0) prodTotal = topProducts.reduce((s, p) => s + p.amount, 0);
+        const prodTotal = topProducts.reduce((s, p) => s + p.amount, 0);
         let thisWeek, mtd;
         if (isLatest) {
           thisWeek = { service: wp.twS, product: wp.twP };
