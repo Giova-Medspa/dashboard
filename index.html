@@ -223,8 +223,13 @@ const DL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 const SHARE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>';
 const LIVE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:middle"><circle cx="12" cy="12" r="3"/><path d="M16.24 7.76a6 6 0 010 8.49m-8.48-8.49a6 6 0 000 8.49"/></svg>';
 
-/* Google Sheets Live Data */
-const SHEET_ID = '1sNhLPPN68FUp4XwsOIweUN_Uz68beljvAxGNBkqFvwg';
+/* Google Sheets Live Data — one BLVD workbook per month */
+const REVENUE_SHEETS = [
+  { id: '1O18OgjVmp9PzL2WoYXGzo-MYZ1TqGgn-9LVTFjlcAGs', label: 'Jan 2026' },
+  { id: '1sNhLPPN68FUp4XwsOIweUN_Uz68beljvAxGNBkqFvwg', label: 'Feb 2026' },
+  { id: '1nvBm3t873nvxsAGds4Ej2kRWgs_JwuZq18LOW5SZIM0', label: 'Mar 2026' },
+];
+const SHEET_ID = REVENUE_SHEETS[REVENUE_SHEETS.length - 1].id;
 const PROVIDER_ROLES = {'Dr Silkey':'Medical Director','Summer Faulkner':'Injector','Riley Packer':'Aesthetician','Brooklyn Jensen':'Aesthetician','Sadie Zeidler':'Aesthetician'};
 
 /* Commission workbooks — one per pay period, newest first */
@@ -418,7 +423,18 @@ function parseXLSX(file) {
    GOOGLE SHEETS LIVE DATA
    ============================================ */
 async function loadFromGoogleSheets() {
-  const BASE = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+  for (const sheet of REVENUE_SHEETS) {
+    await loadOneRevenueSheet(sheet.id);
+  }
+  const keys = Object.keys(STATE.months).sort();
+  if (keys.length > 0) STATE.currentMonth = keys[keys.length - 1];
+  SYNC_STATUS = { state: 'ok', lastSync: new Date().toISOString(), error: null, months: keys.length };
+  saveState();
+  route();
+}
+
+async function loadOneRevenueSheet(sheetId) {
+  const BASE = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
   const tabs = ['Weekly_Pacing', 'Raw_Data services', 'Raw_Product_Data'];
   try {
     const csvs = await Promise.all(
@@ -632,13 +648,8 @@ async function loadFromGoogleSheets() {
     }
 
     STATE.currentMonth = latestMonth;
-    SYNC_STATUS = { state: 'ok', lastSync: new Date().toISOString(), error: null, months: allMonths.length };
-    saveState();
-    route();
   } catch (e) {
-    console.error('[Dashboard] Google Sheets fetch failed:', e);
-    SYNC_STATUS = { state: 'error', lastSync: new Date().toISOString(), error: String(e.message || e).slice(0, 200) };
-    route();
+    console.error('[Dashboard] Sheet fetch failed:', e);
   }
 }
 
