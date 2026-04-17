@@ -450,8 +450,17 @@ async function loadOneRevenueSheet(sheetId) {
     function stripDuplicateHeaders(rows) {
       return rows.filter(r => r['Staff Name'] !== 'Staff Name');
     }
-    const raw = stripDuplicateHeaders(toJson(csvs[1]));
-    const prod = stripDuplicateHeaders(toJson(csvs[2]));
+    // Normalize column name: some sheets use "SaleDate" instead of "SaleDate Date"
+    function normalizeColumns(rows) {
+      return rows.map(r => {
+        if (r['SaleDate'] !== undefined && r['SaleDate Date'] === undefined) {
+          r['SaleDate Date'] = r['SaleDate'];
+        }
+        return r;
+      });
+    }
+    const raw = normalizeColumns(stripDuplicateHeaders(toJson(csvs[1])));
+    const prod = normalizeColumns(stripDuplicateHeaders(toJson(csvs[2])));
     const wpRows = toArr(csvs[0]);
 
     // Detect ALL unique months from date rows
