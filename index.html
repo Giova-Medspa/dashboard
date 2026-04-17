@@ -329,6 +329,7 @@ function toISODate(d) {
 function toMonthKey(d) { const s = toISODate(d); return s ? s.slice(0, 7) : null; }
 function toDateStr(d) { return toISODate(d); }
 function isAllRow(d) { return d === undefined || d === null || d === '' || String(d) === 'All'; }
+function getDate(r) { return getDate(r) !== undefined ? getDate(r) : r['SaleDate']; }
 
 /* ============================================
    XLSX PARSER
@@ -346,7 +347,7 @@ function parseXLSX(file) {
         // Detect month from dates (handles Date objects, strings, and Excel serial numbers)
         let monthKey = null, monthName = null, asOf = null, weekEnd = null;
         for(const r of raw) {
-          monthKey = toMonthKey(r['SaleDate Date']);
+          monthKey = toMonthKey(getDate(r));
           if (monthKey) break;
         }
         if(!monthKey) { reject('Could not detect month from data'); return; }
@@ -373,7 +374,7 @@ function parseXLSX(file) {
           // Categories from raw data
           const categories = {};
           for(const r of raw) {
-            if(r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && isAllRow(r['SaleDate Date'])) {
+            if(r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && isAllRow(getDate(r))) {
               categories[r['Service category_name']] = {
                 revenue: Number(r['Service Sales'])||0,
                 appointments: Number(r['Appointment Count'])||0,
@@ -385,7 +386,7 @@ function parseXLSX(file) {
           // Top products
           const topProducts = [];
           for(const r of prod) {
-            if(r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && isAllRow(r['SaleDate Date'])) {
+            if(r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && isAllRow(getDate(r))) {
               const amt = Number(r['Gross Retail Product Sales']);
               if(amt > 0) topProducts.push({name: r['Product name'], amount: amt});
             }
@@ -395,7 +396,7 @@ function parseXLSX(file) {
           // Appointments/hours from raw All row
           let appts = 0, hrs = 0;
           for(const r of raw) {
-            if(r['Staff Name'] === name && r['Service category_name'] === 'All' && isAllRow(r['SaleDate Date'])) {
+            if(r['Staff Name'] === name && r['Service category_name'] === 'All' && isAllRow(getDate(r))) {
               appts = Number(r['Appointment Count'])||0;
               hrs = Number(r['Service Hours'])||0;
               break;
@@ -461,9 +462,9 @@ async function loadOneRevenueSheet(sheetId) {
     const monthSet = new Set();
     let sampleDates = [];
     for (const r of raw) {
-      const mk = toMonthKey(r['SaleDate Date']);
+      const mk = toMonthKey(getDate(r));
       if (mk) monthSet.add(mk);
-      else if (r['SaleDate Date'] && sampleDates.length < 3) sampleDates.push(String(r['SaleDate Date']));
+      else if (getDate(r) && sampleDates.length < 3) sampleDates.push(String(getDate(r)));
     }
     if (sampleDates.length > 0) console.warn('[Dashboard] Unparseable SaleDate Date samples:', sampleDates);
     if (monthSet.size === 0) {
@@ -479,7 +480,7 @@ async function loadOneRevenueSheet(sheetId) {
     function tagRows(rows) {
       // Pass 1: tag rows that have explicit dates or Month_Key
       const tagged = rows.map(r => {
-        const d = r['SaleDate Date'];
+        const d = getDate(r);
         const mk = r['Month_Key'];
         let month = null;
         if (mk) {
@@ -550,7 +551,7 @@ async function loadOneRevenueSheet(sheetId) {
       // Find latest date in this month for asOf
       let monthAsOf = null;
       for (const r of monthRaw) {
-        const d = r['SaleDate Date'];
+        const d = getDate(r);
         const dStr = toDateStr(d);
         if (dStr && dStr.startsWith(monthKey)) {
           if (!monthAsOf || dStr > monthAsOf) monthAsOf = dStr;
@@ -565,7 +566,7 @@ async function loadOneRevenueSheet(sheetId) {
         // Categories from this month's "All" rows
         const categories = {};
         for (const r of monthRaw) {
-          if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && isAllRow(r['SaleDate Date'])) {
+          if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && isAllRow(getDate(r))) {
             categories[r['Service category_name']] = { revenue: money(r['Service Sales']), appointments: Number(r['Appointment Count']) || 0, hours: Number(r['Service Hours']) || 0 };
           }
         }
@@ -573,7 +574,7 @@ async function loadOneRevenueSheet(sheetId) {
         // If no "All" rows found for this month, aggregate from individual date rows
         if (Object.keys(categories).length === 0) {
           for (const r of monthRaw) {
-            if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && !isAllRow(r['SaleDate Date'])) {
+            if (r['Staff Name'] === name && r['Service category_name'] && r['Service category_name'] !== 'All' && !isAllRow(getDate(r))) {
               const cat = r['Service category_name'];
               if (!categories[cat]) categories[cat] = { revenue: 0, appointments: 0, hours: 0 };
               categories[cat].revenue += money(r['Service Sales']);
@@ -586,7 +587,7 @@ async function loadOneRevenueSheet(sheetId) {
         // Top products from this month's "All" rows
         const topProducts = [];
         for (const r of monthProd) {
-          if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && isAllRow(r['SaleDate Date'])) {
+          if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && isAllRow(getDate(r))) {
             const amt = money(r['Gross Retail Product Sales']);
             if (amt > 0) topProducts.push({ name: r['Product name'], amount: amt });
           }
@@ -595,7 +596,7 @@ async function loadOneRevenueSheet(sheetId) {
         if (topProducts.length === 0) {
           const prodMap = {};
           for (const r of monthProd) {
-            if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && !isAllRow(r['SaleDate Date'])) {
+            if (r['Staff Name'] === name && r['Product name'] && r['Product name'] !== 'All' && !isAllRow(getDate(r))) {
               const pn = r['Product name'];
               if (!prodMap[pn]) prodMap[pn] = 0;
               prodMap[pn] += money(r['Gross Retail Product Sales']);
@@ -610,14 +611,14 @@ async function loadOneRevenueSheet(sheetId) {
         // Appointments & hours
         let appts = 0, hrs = 0;
         for (const r of monthRaw) {
-          if (r['Staff Name'] === name && r['Service category_name'] === 'All' && isAllRow(r['SaleDate Date'])) {
+          if (r['Staff Name'] === name && r['Service category_name'] === 'All' && isAllRow(getDate(r))) {
             appts = Number(r['Appointment Count']) || 0; hrs = Number(r['Service Hours']) || 0; break;
           }
         }
         // Fallback: sum from individual rows
         if (appts === 0 && hrs === 0) {
           for (const r of monthRaw) {
-            if (r['Staff Name'] === name && !isAllRow(r['SaleDate Date']) && r['Service category_name'] !== 'All') {
+            if (r['Staff Name'] === name && !isAllRow(getDate(r)) && r['Service category_name'] !== 'All') {
               appts += Number(r['Appointment Count']) || 0; hrs += Number(r['Service Hours']) || 0;
             }
           }
@@ -627,7 +628,7 @@ async function loadOneRevenueSheet(sheetId) {
         const svcTotal = Object.values(categories).reduce((s, c) => s + c.revenue, 0);
         let prodTotal = 0;
         for (const r of monthProd) {
-          if (r['Staff Name'] === name && r['Product name'] === 'All' && isAllRow(r['SaleDate Date'])) {
+          if (r['Staff Name'] === name && r['Product name'] === 'All' && isAllRow(getDate(r))) {
             prodTotal = money(r['Gross Retail Product Sales']); break;
           }
         }
