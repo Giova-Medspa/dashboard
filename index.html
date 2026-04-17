@@ -604,21 +604,20 @@ async function loadFromGoogleSheets() {
           }
         }
 
-        // MTD & thisWeek — Weekly_Pacing values only apply to latest month
+        // MTD from Raw_Data categories + products (always calculated, not from Weekly_Pacing)
+        const svcTotal = Object.values(categories).reduce((s, c) => s + c.revenue, 0);
+        let prodTotal = 0;
+        for (const r of monthProd) {
+          if (r['Staff Name'] === name && r['Product name'] === 'All' && isAllRow(r['SaleDate Date'])) {
+            prodTotal = money(r['Gross Retail Product Sales']); break;
+          }
+        }
+        if (prodTotal === 0) prodTotal = topProducts.reduce((s, p) => s + p.amount, 0);
         let thisWeek, mtd;
         if (isLatest) {
           thisWeek = { service: wp.twS, product: wp.twP };
-          mtd = { service: wp.mtdS, product: wp.mtdP };
+          mtd = { service: svcTotal || wp.mtdS, product: prodTotal || wp.mtdP };
         } else {
-          // Historical month: MTD = full month total from categories + products
-          const svcTotal = Object.values(categories).reduce((s, c) => s + c.revenue, 0);
-          let prodTotal = 0;
-          for (const r of monthProd) {
-            if (r['Staff Name'] === name && r['Product name'] === 'All' && isAllRow(r['SaleDate Date'])) {
-              prodTotal = money(r['Gross Retail Product Sales']); break;
-            }
-          }
-          if (prodTotal === 0) prodTotal = topProducts.reduce((s, p) => s + p.amount, 0);
           thisWeek = { service: 0, product: 0 };
           mtd = { service: svcTotal, product: prodTotal };
         }
