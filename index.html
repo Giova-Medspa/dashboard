@@ -329,7 +329,7 @@ function toISODate(d) {
 function toMonthKey(d) { const s = toISODate(d); return s ? s.slice(0, 7) : null; }
 function toDateStr(d) { return toISODate(d); }
 function isAllRow(d) { return d === undefined || d === null || d === '' || String(d) === 'All'; }
-function getDate(r) { return getDate(r) !== undefined ? getDate(r) : r['SaleDate']; }
+function getDate(r) { return r['SaleDate Date'] !== undefined ? r['SaleDate Date'] : r['SaleDate']; }
 
 /* ============================================
    XLSX PARSER
