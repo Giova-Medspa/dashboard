@@ -443,6 +443,9 @@ async function loadOneRevenueSheet(sheetId) {
         return r.text();
       }))
     );
+    // Normalize header: some sheets use "SaleDate" instead of "SaleDate Date"
+    csvs[1] = csvs[1].replace('"SaleDate",', '"SaleDate Date",');
+    csvs[2] = csvs[2].replace('"SaleDate",', '"SaleDate Date",');
     const toJson = csv => { const wb = XLSX.read(csv, {type:'string'}); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]); };
     const toArr = csv => { const wb = XLSX.read(csv, {type:'string'}); return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}); };
     const money = v => { if (typeof v === 'number') return v; if (!v) return 0; return Number(String(v).replace(/[$,]/g, '')) || 0; };
@@ -450,17 +453,8 @@ async function loadOneRevenueSheet(sheetId) {
     function stripDuplicateHeaders(rows) {
       return rows.filter(r => r['Staff Name'] !== 'Staff Name');
     }
-    // Normalize column name: some sheets use "SaleDate" instead of "SaleDate Date"
-    function normalizeColumns(rows) {
-      return rows.map(r => {
-        if (r['SaleDate'] !== undefined && r['SaleDate Date'] === undefined) {
-          r['SaleDate Date'] = r['SaleDate'];
-        }
-        return r;
-      });
-    }
-    const raw = normalizeColumns(stripDuplicateHeaders(toJson(csvs[1])));
-    const prod = normalizeColumns(stripDuplicateHeaders(toJson(csvs[2])));
+    const raw = stripDuplicateHeaders(toJson(csvs[1]));
+    const prod = stripDuplicateHeaders(toJson(csvs[2]));
     const wpRows = toArr(csvs[0]);
 
     // Detect ALL unique months from date rows
