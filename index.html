@@ -706,7 +706,8 @@ async function loadCommissionData() {
       var pkg = money(r['Package']);
       var tips = money(r['Tips']);
       var total = money(r['Total']);
-      providers[name] = { service: svc, product: prod, package: pkg, tips: tips, grand: total, type: mapEntry ? mapEntry.type : 'commission' };
+      var hrs = Number(r['Hours'] || r['Service Hours'] || r['Hrs'] || 0);
+      providers[name] = { service: svc, product: prod, package: pkg, tips: tips, grand: total, hours: hrs, type: mapEntry ? mapEntry.type : 'commission' };
       grandTotal += total;
     }
     COMMISSION_DATA = { providers: providers, grandTotal: grandTotal };
@@ -732,6 +733,7 @@ function renderCommissionSummary() {
         '<span>Product: ' + fmtD(d.product) + '</span>' +
         (d.package > 0 ? '<span>Package: ' + fmtD(d.package) + '</span>' : '') +
         '<span>Tips: ' + fmtD(d.tips) + '</span>' +
+        (d.hours > 0 ? '<span>Hours: ' + d.hours.toFixed(1) + '</span>' : '') +
       '</div>' +
       '<span class="comm-type ' + typeClass + '">' + typeLabel + '</span>' +
     '</div>';
@@ -938,6 +940,7 @@ function renderExecutive() {
     <div class="nav-bar">
       <a class="nav-btn active" href="#">All Providers</a>
       ${data.providers.map(p=>`<a class="nav-btn" href="${SECURE_URLS[slug(p.name)]||'#'+slug(p.name)}" ${SECURE_URLS[slug(p.name)]?'target="_blank"':''}>${p.name}</a>`).join('')}
+      <a class="nav-btn" href="commissions.html" style="background:var(--g-sky);border-color:var(--g-pigeon)">Commissions Console</a>
     </div>
     ${renderUploadModal()}
     <div class="download-bar">
@@ -986,6 +989,7 @@ function renderProvider(provSlug) {
     <div class="nav-bar">
       <a class="nav-btn" href="#">All Providers</a>
       ${data.providers.map(pr=>`<a class="nav-btn ${slug(pr.name)===provSlug?'active':''}" href="${SECURE_URLS[slug(pr.name)]||'#'+slug(pr.name)}" ${SECURE_URLS[slug(pr.name)]?'target="_blank"':''}>${pr.name}</a>`).join('')}
+      <a class="nav-btn" href="commissions.html" style="background:var(--g-sky);border-color:var(--g-pigeon)">Commissions Console</a>
     </div>
     <div class="download-bar">
       <button class="dl-btn" onclick="downloadProvider('${slug(p.name)}')">${DL_ICON} Download Scorecard</button>
